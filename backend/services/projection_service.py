@@ -18,6 +18,7 @@ class ProjectionService:
     def __init__(self, db: Session):
         self.db = db
         self.data_service = DataService(db)
+        self.team_stats_service = TeamStatsService(db)
         
         # Validation ranges for adjustments
         self.adjustment_ranges = {

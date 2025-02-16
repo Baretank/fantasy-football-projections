@@ -1,276 +1,203 @@
 from typing import Dict, List, Optional, Tuple
-import pandas as pd
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from pro_football_reference_web_scraper import player_game_log as pgl
-from pro_football_reference_web_scraper import team_game_log as tgl
-from backend.database.models import Player, BaseStat
-from backend.database.database import get_db
-import uuid
+from pro_football_reference_web_scraper import player_stats as pfs
+import pandas as pd
 import logging
 from datetime import datetime
+import uuid
+import json
+from pathlib import Path
+from backend.database.models import Player, BaseStat, TeamStat
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(f'data_import_{datetime.now().strftime("%Y%m%d")}.log'),
-        logging.StreamHandler()
-    ]
-)
 logger = logging.getLogger(__name__)
-
-class ValidationError(Exception):
-    """Custom exception for data validation errors."""
-    pass
 
 class DataImportService:
     def __init__(self, db: Session):
         self.db = db
         self.positions = ['QB', 'RB', 'WR', 'TE']
-        self.stat_mappings = {
+        
+        # Stat mappings from PFR to our database
+        self.pfr_stat_mappings = {
             'QB': {
-                'Cmp': 'completions',
-                'Att': 'attempts',
-                'Yds': 'passing_yards',
-                'TD': 'passing_touchdowns',
-                'Int': 'interceptions',
-                'Rush_Att': 'rushing_attempts',
-                'Rush_Yds': 'rushing_yards',
-                'Rush_TD': 'rushing_touchdowns'
+                'Pass_Cmp': 'completions',
+                'Pass_Att': 'pass_attempts',
+                'Pass_Yds': 'pass_yards',
+                'Pass_TD': 'pass_td',
+                'Pass_Int': 'interceptions',
+                'Rush_Att': 'rush_attempts',
+                'Rush_Yds': 'rush_yards',
+                'Rush_TD': 'rush_td'
             },
             'RB': {
-                'Rush_Att': 'rushing_attempts',
-                'Rush_Yds': 'rushing_yards',
-                'Rush_TD': 'rushing_touchdowns',
-                'Tgt': 'targets',
+                'Rush_Att': 'rush_attempts',
+                'Rush_Yds': 'rush_yards',
+                'Rush_TD': 'rush_td',
+                'Rec_Tgt': 'targets',
                 'Rec': 'receptions',
-                'Rec_Yds': 'receiving_yards',
-                'Rec_TD': 'receiving_touchdowns'
+                'Rec_Yds': 'rec_yards',
+                'Rec_TD': 'rec_td'
             },
             'WR': {
-                'Tgt': 'targets',
+                'Rec_Tgt': 'targets',
                 'Rec': 'receptions',
-                'Rec_Yds': 'receiving_yards',
-                'Rec_TD': 'receiving_touchdowns'
+                'Rec_Yds': 'rec_yards',
+                'Rec_TD': 'rec_td',
+                'Rush_Att': 'rush_attempts',
+                'Rush_Yds': 'rush_yards',
+                'Rush_TD': 'rush_td'
             },
             'TE': {
-                'Tgt': 'targets',
+                'Rec_Tgt': 'targets',
                 'Rec': 'receptions',
-                'Rec_Yds': 'receiving_yards',
-                'Rec_TD': 'receiving_touchdowns'
+                'Rec_Yds': 'rec_yards',
+                'Rec_TD': 'rec_td'
             }
         }
-        
-        # Statistical validation rules
-        self.validation_rules = {
-            'completions': lambda x: 0 <= x <= 50,  # Max completions in a game
-            'attempts': lambda x: 0 <= x <= 70,     # Max attempts in a game
-            'passing_yards': lambda x: -30 <= x <= 600,  # Allow for losses
-            'rushing_yards': lambda x: -20 <= x <= 300,
-            'receiving_yards': lambda x: -10 <= x <= 300,
-            'touchdowns': lambda x: 0 <= x <= 6,
-        }
 
-    async def import_player_data(self, season: int) -> Tuple[int, int, List[str]]:
+    async def import_season_data(self, season: int = 2024) -> Tuple[int, List[str]]:
         """
-        Import player game logs for all relevant positions.
-        Returns: (success_count, error_count, error_messages)
+        Import season total data from both PFR (veterans) and local JSON (rookies).
+        Returns: (success_count, error_messages)
         """
         success_count = 0
-        error_count = 0
         error_messages = []
 
-        logger.info(f"Starting data import for {season} season")
-        
         try:
-            # First, get all teams for the season
-            teams = await self._get_teams_for_season(season)
-            
-            for position in self.positions:
-                logger.info(f"Importing {position} data for {season} season")
-                players = await self._get_active_players(position, season, teams)
-                
-                for player_name in players:
-                    try:
-                        await self._import_player_games(player_name, position, season)
-                        success_count += 1
-                    except Exception as e:
-                        error_msg = f"Error importing {player_name} ({position}): {str(e)}"
-                        logger.error(error_msg)
-                        error_messages.append(error_msg)
-                        error_count += 1
-                        
-                    # Commit after each player to avoid large transactions
-                    self.db.commit()
-                    
+            # Import veterans from Pro Football Reference
+            logger.info("Importing veteran data from Pro Football Reference")
+            veteran_stats = await self._get_veteran_season_stats(season - 1)
+            for player_data in veteran_stats:
+                try:
+                    await self._create_or_update_player(player_data, season)
+                    success_count += 1
+                except Exception as e:
+                    error_messages.append(f"Error importing veteran {player_data['name']}: {str(e)}")
+
+            # Import rookies from local JSON
+            logger.info("Importing rookie data from local JSON")
+            rookie_stats = await self._get_rookie_data()
+            for rookie_data in rookie_stats:
+                try:
+                    await self._create_or_update_player(rookie_data, season)
+                    success_count += 1
+                except Exception as e:
+                    error_messages.append(f"Error importing rookie {rookie_data['name']}: {str(e)}")
+
+            self.db.commit()
+            return success_count, error_messages
+
         except Exception as e:
             logger.error(f"Major error during import: {str(e)}")
             self.db.rollback()
             raise
 
-        logger.info(f"Import completed. Successes: {success_count}, Errors: {error_count}")
-        return success_count, error_count, error_messages
+    async def _get_veteran_season_stats(self, season: int) -> List[Dict]:
+        """
+        Get season totals for veterans from Pro Football Reference.
+        """
+        players = []
+        for position in self.positions:
+            try:
+                # Get season stats for position using PFR API
+                stats_df = pfs.get_season_stats(season=season, position=position)
+                
+                if stats_df is None or stats_df.empty:
+                    logger.warning(f"No data found for {position} in season {season}")
+                    continue
+                
+                # Convert PFR stats to our format
+                for _, row in stats_df.iterrows():
+                    player_dict = {
+                        'name': row['Player'],
+                        'team': row['Tm'],
+                        'position': position,
+                        'stats': {}
+                    }
+                    
+                    # Map stats using position-specific mappings
+                    for pfr_stat, our_stat in self.pfr_stat_mappings[position].items():
+                        if pfr_stat in row and pd.notna(row[pfr_stat]):
+                            player_dict['stats'][our_stat] = float(row[pfr_stat])
+                    
+                    players.append(player_dict)
+                    
+            except Exception as e:
+                logger.error(f"Error fetching {position} stats from PFR: {str(e)}")
 
-    async def _get_teams_for_season(self, season: int) -> List[str]:
-        """Get all NFL teams active in the given season."""
+        return players
+
+    async def _get_rookie_data(self) -> List[Dict]:
+        """
+        Get rookie data from local JSON file.
+        """
         try:
-            # Use team_game_log to get all teams
-            teams = set()
-            # You might need to adjust this based on the actual API
-            team_data = tgl.get_team_game_log(team="Kansas City Chiefs", season=season)
-            if team_data is not None:
-                teams.update(team_data['Tm'].unique())
-            return list(teams)
+            # Construct path to rookies.json
+            data_dir = Path(__file__).parent.parent.parent / "data"
+            rookie_file = data_dir / "rookies.json"
+            
+            if not rookie_file.exists():
+                logger.error(f"Rookie data file not found: {rookie_file}")
+                return []
+            
+            with open(rookie_file, 'r') as f:
+                rookie_data = json.load(f)
+            
+            rookies = []
+            for rookie in rookie_data.get('rookies', []):
+                # Convert rookie JSON format to our standard format
+                rookie_dict = {
+                    'name': rookie['name'],
+                    'team': rookie['team'],
+                    'position': rookie['position'],
+                    'stats': {}
+                }
+                
+                # Map projected stats to our format
+                projected_stats = rookie.get('projected_stats', {})
+                stat_mapping = self.pfr_stat_mappings[rookie['position']]
+                
+                for our_stat in stat_mapping.values():
+                    if our_stat in projected_stats:
+                        rookie_dict['stats'][our_stat] = float(projected_stats[our_stat])
+                
+                rookies.append(rookie_dict)
+                
+            return rookies
+            
         except Exception as e:
-            logger.error(f"Error getting teams: {str(e)}")
+            logger.error(f"Error reading rookie data: {str(e)}")
             return []
 
-    async def _get_active_players(self, position: str, season: int, teams: List[str]) -> List[str]:
-        """
-        Get list of active players for position by checking team rosters.
-        """
-        players = set()
-        
-        for team in teams:
-            try:
-                # This would need to be adjusted based on the actual API capabilities
-                # You might need to scrape team roster pages
-                roster = await self._get_team_roster(team, season)
-                position_players = [p for p in roster if p['position'] == position]
-                players.update(p['name'] for p in position_players)
-            except Exception as e:
-                logger.error(f"Error getting roster for {team}: {str(e)}")
-                continue
-                
-        return list(players)
-
-    async def _get_team_roster(self, team: str, season: int) -> List[Dict]:
-        """
-        Get team roster for the given season.
-        This is a placeholder - implement based on available data sources.
-        """
-        # Implement roster retrieval logic here
-        # Could scrape team pages or use another API
-        return []
-
-    def _validate_stat_value(self, stat_type: str, value: float) -> bool:
-        """Validate a statistical value against defined rules."""
-        if stat_type in self.validation_rules:
-            return self.validation_rules[stat_type](value)
-        return True  # No specific rule for this stat type
-
-    async def _import_player_games(self, player_name: str, position: str, season: int) -> None:
-        """Import and validate all games for a player."""
-        logger.info(f"Importing games for {player_name} ({position})")
-        
-        # Get game log from Pro Football Reference
-        game_log = pgl.get_player_game_log(
-            player=player_name,
-            position=position,
-            season=season
-        )
-        
-        if game_log is None or game_log.empty:
-            logger.warning(f"No game log found for {player_name}")
-            return
-            
-        # Create or update player record
-        player = await self._get_or_create_player(player_name, position, game_log)
-        
-        # Process each game
-        for _, game in game_log.iterrows():
-            await self._process_game(game, player, position, season)
-
-    async def _process_game(self, game, player, position: str, season: int) -> None:
-        """Process and validate a single game's statistics."""
-        week = self._extract_week(game)
-        
-        for pfr_stat, our_stat in self.stat_mappings[position].items():
-            if pfr_stat in game:
-                stat_value = game[pfr_stat]
-                
-                if pd.notna(stat_value):
-                    # Validate the stat value
-                    if not self._validate_stat_value(our_stat, float(stat_value)):
-                        logger.warning(
-                            f"Invalid stat value for {player.name}: {our_stat}={stat_value}"
-                        )
-                        continue
-                        
-                    # Create the stat record
-                    base_stat = BaseStat(
-                        stat_id=str(uuid.uuid4()),
-                        player_id=player.player_id,
-                        season=season,
-                        week=week,
-                        stat_type=our_stat,
-                        value=float(stat_value)
-                    )
-                    self.db.add(base_stat)
-
-    async def _get_or_create_player(self, player_name: str, position: str, game_log: pd.DataFrame) -> Player:
-        """Get existing player record or create new one with proper error handling."""
+    async def _create_or_update_player(self, player_data: Dict, season: int) -> None:
+        """Create or update player and their stats."""
         try:
-            team = self._extract_team(game_log)
-            
             player = self.db.query(Player).filter(
-                Player.name == player_name,
-                Player.position == position
+                Player.name == player_data['name'],
+                Player.position == player_data['position']
             ).first()
-            
+
             if not player:
                 player = Player(
                     player_id=str(uuid.uuid4()),
-                    name=player_name,
-                    team=team,
-                    position=position
+                    name=player_data['name'],
+                    team=player_data['team'],
+                    position=player_data['position']
                 )
                 self.db.add(player)
-                self.db.flush()  # Get the ID without committing
+                self.db.flush()
+
+            # Create base stats
+            for stat_type, value in player_data.get('stats', {}).items():
+                stat = BaseStat(
+                    stat_id=str(uuid.uuid4()),
+                    player_id=player.player_id,
+                    season=season,
+                    stat_type=stat_type,
+                    value=value
+                )
+                self.db.add(stat)
                 
-            return player
-            
         except SQLAlchemyError as e:
-            logger.error(f"Database error for {player_name}: {str(e)}")
+            logger.error(f"Database error for player {player_data['name']}: {str(e)}")
             raise
-
-    def _extract_team(self, game_log: pd.DataFrame) -> str:
-        """Extract team from game log with validation."""
-        if 'Tm' in game_log.columns:
-            # Get the most recent team
-            team = game_log['Tm'].iloc[-1]
-            if pd.notna(team) and isinstance(team, str):
-                return team
-                
-        logger.warning("Could not extract team from game log")
-        return 'UNK'
-
-    def _extract_week(self, game) -> Optional[int]:
-        """Extract and validate week number from game data."""
-        try:
-            if 'Week' in game:
-                week = int(game['Week'])
-                if 1 <= week <= 18:  # Valid NFL week numbers
-                    return week
-                    
-            logger.warning(f"Invalid week number in game data: {game.get('Week')}")
-            return None
-            
-        except (ValueError, TypeError) as e:
-            logger.error(f"Error extracting week number: {str(e)}")
-            return None
-
-# Helper function to run the import
-async def import_season_data(season: int) -> Tuple[int, int, List[str]]:
-    """
-    Import data for a complete season.
-    Returns (success_count, error_count, error_messages)
-    """
-    db = next(get_db())
-    try:
-        importer = DataImportService(db)
-        return await importer.import_player_data(season)
-    finally:
-        db.close()
