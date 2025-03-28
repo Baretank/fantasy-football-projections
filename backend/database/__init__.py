@@ -1,5 +1,8 @@
+"""
+Database package initialization.
+"""
 from .database import Base, engine, get_db, SessionLocal
-from .models import Player, BaseStat, Projection
+from .models import Player, BaseStat, Projection, TeamStat
 
 __all__ = [
     'Base',
@@ -8,5 +11,6 @@ __all__ = [
     'SessionLocal',
     'Player',
     'BaseStat',
-    'Projection'
+    'Projection',
+    'TeamStat'
 ]

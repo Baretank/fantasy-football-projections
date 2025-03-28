@@ -1,10 +1,56 @@
-from sqlalchemy import Column, Integer, Float, String, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, Float, String, ForeignKey, DateTime, JSON
 from sqlalchemy.orm import relationship, mapped_column, Mapped
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from .database import Base
-import pandas as pd
 import uuid
+
+class GameStats(Base):
+    """Game-by-game player statistics"""
+    __tablename__ = "game_stats"
+
+    game_stat_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    player_id: Mapped[str] = mapped_column(ForeignKey("players.player_id"), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    opponent: Mapped[str] = mapped_column(String, nullable=False)
+    game_location: Mapped[str] = mapped_column(String, nullable=False)  # home/away
+    result: Mapped[str] = mapped_column(String, nullable=False)  # W/L
+    team_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    opponent_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    # Store position-specific stats in JSON
+    stats: Mapped[Dict] = mapped_column(JSON, nullable=False)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    player = relationship("Player", back_populates="game_stats")
+
+    @classmethod
+    def from_game_log(cls, player_id: str, game_log_row: Dict) -> 'GameStats':
+        """Create GameStats instance from a PFR game log row"""
+        base_data = {
+            'player_id': player_id,
+            'season': int(game_log_row['date'][:4]),  # Extract year from date
+            'week': int(game_log_row['week']),
+            'opponent': game_log_row['opp'],
+            'game_location': 'away' if game_log_row['game_location'] == '@' else 'home',
+            'result': game_log_row['result'],
+            'team_score': int(game_log_row['team_pts']),
+            'opponent_score': int(game_log_row['opp_pts'])
+        }
+        
+        # Remove base fields to leave only stats
+        stats_fields = {k: v for k, v in game_log_row.items() 
+                       if k not in ['date', 'week', 'opp', 'game_location', 
+                                  'result', 'team_pts', 'opp_pts']}
+        
+        return cls(
+            game_stat_id=str(uuid.uuid4()),
+            **base_data,
+            stats=stats_fields
+        )
 
 class Player(Base):
     """Player information and metadata"""
@@ -18,6 +64,7 @@ class Player(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
+    game_stats = relationship("GameStats", back_populates="player")
     base_stats = relationship("BaseStat", back_populates="player")
     projections = relationship("Projection", back_populates="player")
 

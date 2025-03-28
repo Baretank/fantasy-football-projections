@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
-from backend.database.models import Player, BaseStat, Projection
+from sqlalchemy import and_
+from backend.database.models import Player, BaseStat, GameStats, TeamStat
 import logging
 
 logger = logging.getLogger(__name__)
@@ -8,7 +9,7 @@ logger = logging.getLogger(__name__)
 class DataService:
     """
     Service for managing player and statistical data.
-    Handles data retrieval, validation, and storage.
+    Handles data retrieval and updates, but not imports.
     """
     
     def __init__(self, db: Session):
@@ -34,7 +35,7 @@ class DataService:
     async def get_player_stats(self, 
                              player_id: str, 
                              season: Optional[int] = None) -> List[BaseStat]:
-        """Retrieve player statistics."""
+        """Retrieve player season statistics."""
         query = self.db.query(BaseStat).filter(BaseStat.player_id == player_id)
         
         if season:
@@ -42,43 +43,107 @@ class DataService:
             
         return query.all()
 
+    async def get_player_game_logs(self,
+                                 player_id: str,
+                                 season: Optional[int] = None) -> List[GameStats]:
+        """Retrieve player game-by-game statistics."""
+        query = self.db.query(GameStats).filter(GameStats.player_id == player_id)
+        
+        if season:
+            query = query.filter(GameStats.season == season)
+            
+        return query.order_by(GameStats.season, GameStats.week).all()
+
     async def update_player(self, player_id: str, data: Dict) -> Optional[Player]:
         """Update player information."""
-        player = await self.get_player(player_id)
-        if player:
-            for key, value in data.items():
-                setattr(player, key, value)
-            self.db.commit()
-        return player
+        try:
+            player = await self.get_player(player_id)
+            if player:
+                for key, value in data.items():
+                    setattr(player, key, value)
+                self.db.commit()
+            return player
+        except Exception as e:
+            logger.error(f"Error updating player {player_id}: {str(e)}")
+            self.db.rollback()
+            return None
 
-    async def create_player(self, data: Dict) -> Player:
-        """Create a new player record."""
-        player = Player(**data)
-        self.db.add(player)
-        self.db.commit()
-        return player
+    async def get_team_stats(self, 
+                           team: str, 
+                           season: int,
+                           week: Optional[int] = None) -> Optional[TeamStat]:
+        """Retrieve team statistics."""
+        query = self.db.query(TeamStat).filter(
+            and_(TeamStat.team == team, TeamStat.season == season)
+        )
+        
+        if week:
+            query = query.filter(TeamStat.week == week)
+            
+        return query.first()
 
-    async def add_player_stats(self, player_id: str, stats: List[Dict]) -> List[BaseStat]:
-        """Add new statistics for a player."""
-        new_stats = []
-        for stat_data in stats:
-            stat = BaseStat(player_id=player_id, **stat_data)
-            self.db.add(stat)
-            new_stats.append(stat)
-        self.db.commit()
-        return new_stats
+    async def get_all_team_stats(self, season: int) -> List[TeamStat]:
+        """Retrieve statistics for all teams in a season."""
+        return self.db.query(TeamStat).filter(TeamStat.season == season).all()
 
-    async def get_team_stats(self, team: str, season: int) -> Dict:
-        """Retrieve aggregate team statistics."""
-        # Implementation for team-level stat aggregation
-        pass
+    async def get_player_splits(self,
+                              player_id: str,
+                              season: int,
+                              split_type: str) -> Dict:
+        """
+        Get player statistical splits (home/away, win/loss, etc).
+        
+        Args:
+            player_id: Player's unique identifier
+            season: Season year
+            split_type: Type of split ('home_away' or 'win_loss')
+        
+        Returns:
+            Dictionary of split statistics
+        """
+        game_logs = await self.get_player_game_logs(player_id, season)
+        
+        if split_type == 'home_away':
+            home_games = [g for g in game_logs if g.game_location == 'home']
+            away_games = [g for g in game_logs if g.game_location == 'away']
+            
+            return {
+                'home': self._aggregate_game_stats(home_games),
+                'away': self._aggregate_game_stats(away_games)
+            }
+            
+        elif split_type == 'win_loss':
+            wins = [g for g in game_logs if g.result == 'W']
+            losses = [g for g in game_logs if g.result == 'L']
+            
+            return {
+                'wins': self._aggregate_game_stats(wins),
+                'losses': self._aggregate_game_stats(losses)
+            }
+            
+        else:
+            raise ValueError(f"Unknown split type: {split_type}")
 
-    async def validate_stats(self, stats: List[Dict]) -> bool:
-        """Validate statistics for consistency and reasonableness."""
-        # Implementation for stat validation
-        pass
-
-    async def import_historical_data(self, source: str, season: int) -> bool:
-        """Import historical data from specified source."""
-        # Implementation for data import
-        pass
+    def _aggregate_game_stats(self, games: List[GameStats]) -> Dict:
+        """Aggregate statistics from a list of games."""
+        if not games:
+            return {}
+            
+        # Initialize with game counts
+        aggregated = {
+            'games': len(games),
+            'total_points': sum(g.team_score for g in games),
+            'points_allowed': sum(g.opponent_score for g in games)
+        }
+        
+        # Aggregate all stats from the JSON field
+        for stat_key in games[0].stats.keys():
+            try:
+                aggregated[stat_key] = sum(
+                    float(g.stats.get(stat_key, 0)) for g in games
+                )
+            except (ValueError, TypeError):
+                # Skip any non-numeric stats
+                continue
+                
+        return aggregated

@@ -6,6 +6,7 @@ node_modules
 # Testing
 coverage
 .nyc_output
+pytest.ini
 
 # Production
 build
@@ -67,6 +68,7 @@ venv/
 # Database
 *.db
 *.sqlite3
+rookie_projections.xlsx
 
 # Conda
 .conda/

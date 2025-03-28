@@ -1,6 +1,6 @@
-from pathlib import Path
-import sys
-
-# Add the project root to Python path for imports in tests
-project_root = str(Path(__file__).parent.parent.parent)
-sys.path.insert(0, project_root)
+# Enable test directory to be a Python package
+"""
+Test package initialization.
+This file makes the tests directory a Python package.
+Path configuration is handled in conftest.py
+"""

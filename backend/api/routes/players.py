@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from ..schemas import (
+from backend.api.schemas import (
     PlayerResponse, 
     PlayerStats, 
     ErrorResponse,
     SuccessResponse
 )
-from ..database import get_db
-from ..services import DataService
+from backend.database.database import get_db
+from backend.services.data_service import DataService
 import logging
 
 logger = logging.getLogger(__name__)

@@ -1,4 +1,4 @@
-fantasy-football-projections/
+NFLData/
 ├── README.md
 ├── .gitignore
 ├── package.json
@@ -56,5 +56,6 @@ fantasy-football-projections/
 │
 │
 └── data/
-    └── sqlite.db              # Local SQLite database
+    ├── sqlite.db              # Local SQLite database
+    └── rookies.json           # Rookie player data
 

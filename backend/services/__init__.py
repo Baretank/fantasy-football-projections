@@ -1,11 +1,12 @@
-from .projection_service import ProjectionService
+"""
+Services package initialization.
+"""
 from .data_service import DataService
-from .data_import_service import DataImportService
+from .projection_service import ProjectionService
 from .team_stat_service import TeamStatsService
 
 __all__ = [
-    'ProjectionService',
     'DataService',
-    'DataImportService',
+    'ProjectionService',
     'TeamStatsService'
 ]
