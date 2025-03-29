@@ -9,9 +9,15 @@ A modern web application for creating and managing fantasy football player proje
 - **Scenario Planning**: Create, clone, and compare multiple projection scenarios for what-if analysis
 - **Team-Level Analysis**: Maintain mathematical consistency across team-level adjustments with fill player generation
 - **Enhanced Metrics**: Net yardage calculations, fumble tracking, sack analysis, and detailed efficiency rates
+- **Projection Uncertainty**: Statistical variance and confidence intervals for all projections
+- **Rookie Projections**: Specialized rookie projection system with historical comps and team context
+- **Player Comparison**: Side-by-side comparison tool with visualization and radar charts
+- **Dashboard Analytics**: Comprehensive dashboard with projection insights and key metrics
 - **Granular Controls**: Fine-tune individual player metrics and see real-time impacts
 - **Batch Operations**: Apply changes to multiple players simultaneously
 - **Modern Interface**: Intuitive React-based UI with real-time updates
+- **Data Import Verification**: Robust validation for imported statistical data
+- **Performance Optimization**: Caching and query optimization for fast response times
 
 ## 🚀 Getting Started
 
@@ -20,6 +26,7 @@ A modern web application for creating and managing fantasy football player proje
 - Python 3.11+
 - Node.js 18+
 - Conda (recommended for environment management)
+- Git
 
 ### Installation
 
@@ -44,6 +51,12 @@ python backend/database/init_db.py
 ```bash
 cd frontend
 npm install
+```
+
+5. Optional: Import sample data:
+```bash
+cd backend/scripts
+python upload_season.py --season 2024 --verify
 ```
 
 ### Running the Application
@@ -75,6 +88,7 @@ fantasy-football-projections/
 ├── frontend/                # React + TypeScript frontend
 │   ├── src/
 │   │   ├── components/      # React components
+│   │   ├── pages/           # Page components
 │   │   ├── services/        # API client and data services
 │   │   └── utils/           # Helper functions
 │   └── public/              # Static assets
@@ -90,15 +104,18 @@ See `docs/structure.md` for a detailed project structure overview.
 - SQLAlchemy (ORM)
 - Pydantic (data validation)
 - SQLite (database)
+- Numpy/Pandas (data processing)
 - Pytest (testing)
 
 ### Frontend
 - React 18
 - TypeScript
+- React Router v6 (routing)
 - Vite (build tool)
 - shadcn/ui (component library)
 - Recharts (data visualization)
 - TailwindCSS (styling)
+- Heroicons (icons)
 
 ## 📊 Statistical Model
 
@@ -170,7 +187,19 @@ Please follow our coding standards and include appropriate tests.
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🔍 New Features in v0.2.0
+## 🔍 New Features in v0.3.0
+
+- **Projection Uncertainty**: Statistical variance and confidence intervals for all projections
+- **Rookie Projection System**: Comprehensive rookie modeling with historical comparisons
+- **Side-by-Side Comparison**: Advanced player comparison tool with multiple visualization options
+- **Enhanced Dashboard**: Improved analytics dashboard with key performance indicators
+- **Modern Navigation**: Comprehensive navigation structure with improved UX
+- **Data Validation**: Robust validation and error correction for imported data
+- **Performance Optimization**: Caching and query optimization for faster response times
+- **Batch API Operations**: Enhanced batch operations for projection management
+- **Data Export**: Export capabilities for projections in multiple formats
+
+### Previous Features in v0.2.0
 
 - **Enhanced Data Models**: Added support for net yardage, fumbles, sacks, and detailed efficiency metrics
 - **Manual Override System**: New override tracking system with automatic dependent stat recalculation
@@ -185,13 +214,25 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - Single-user system (no authentication)
 - Local SQLite database only
 - Limited historical data import options
-- Fill player system partially implemented
+- Limited mobile responsiveness
+
+### Recently Completed Features
+- ✅ Enhanced rookie projection system
+- ✅ Statistical variance and confidence intervals
+- ✅ Data validation for imports
+- ✅ Side-by-side player comparison
+- ✅ Dashboard analytics view
+- ✅ Modern navigation structure
+- ✅ Performance optimizations (caching, query improvements)
+- ✅ Batch operations and data export
 
 ### Planned Features
 - Complete regression analysis implementation
 - Multi-user support with authentication
 - PostgreSQL database support
 - Advanced statistical analysis tools
-- Bulk data import/export
+- Mobile responsive design
+- Strength of schedule adjustments
+- Improved team-level analytics
 - API rate limiting
 - Real-time collaborative features

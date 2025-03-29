@@ -12,6 +12,7 @@ sys.path.insert(0, project_root)
 
 from backend.database import SessionLocal
 from backend.services.data_import_service import DataImportService
+from backend.services.data_validation import DataValidationService
 
 # Configure logging
 logging.basicConfig(
@@ -63,11 +64,38 @@ async def verify_imports(
     """Verify imported data for consistency."""
     logger.info(f"\nVerifying {position} imports...")
     
-    # TODO: Add data verification checks
-    # 1. Check game counts
-    # 2. Verify season totals match game logs
-    # 3. Check for missing required stats
-    pass
+    db = service.db
+    validation_service = DataValidationService(db)
+    verification_issues = []
+    
+    # Get all players of the specified position
+    from backend.database.models import Player
+    players = db.query(Player).filter(Player.position == position).all()
+    logger.info(f"Found {len(players)} {position} players to verify")
+    
+    # Process each player
+    for player in players:
+        # Run validation checks
+        player_issues = validation_service.validate_player_data(player, season)
+        
+        if player_issues:
+            verification_issues.extend(player_issues)
+    
+    # Report verification results
+    if verification_issues:
+        logger.warning(f"\nFound {len(verification_issues)} verification issues for {position} players:")
+        for issue in verification_issues:
+            logger.warning(f"- {issue}")
+            
+        # Write issues to file
+        issues_file = Path(project_root) / "data" / f"{position.lower()}_verification_issues.txt"
+        with open(issues_file, 'w') as f:
+            f.write('\n'.join(verification_issues))
+    else:
+        logger.info(f"All {position} data verified successfully!")
+    
+    # Commit changes
+    db.commit()
 
 async def main():
     parser = argparse.ArgumentParser(description='Import NFL player data')

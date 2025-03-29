@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from backend.api.routes import players_router, projections_router, overrides_router, scenarios_router
+from backend.api.routes.batch import router as batch_router
 from backend.database import Base, engine
 from backend.services import TeamStatsService
 import logging
@@ -51,6 +52,7 @@ app.include_router(players_router, prefix="/api/players", tags=["players"])
 app.include_router(projections_router, prefix="/api/projections", tags=["projections"])
 app.include_router(overrides_router, prefix="/api/overrides", tags=["overrides"])
 app.include_router(scenarios_router, prefix="/api/scenarios", tags=["scenarios"])
+app.include_router(batch_router, prefix="/api/batch", tags=["batch operations"])
 
 # Ensure data directory exists
 data_dir = Path("data")
@@ -72,6 +74,11 @@ async def startup_event():
         rookie_file = data_dir / "rookies.json"
         if not rookie_file.exists():
             logger.warning("rookies.json not found in data directory")
+        
+        # Initialize cache service
+        from backend.services.cache_service import get_cache
+        cache = get_cache(ttl_seconds=300)  # 5 minute default TTL
+        logger.info(f"Cache service initialized")
             
     except Exception as e:
         logger.error(f"Failed to initialize application: {str(e)}")

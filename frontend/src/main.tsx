@@ -1,10 +1,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import ProjectionApp from './ProjectionApp'
+import Routes from './routes'
 import './style.css'
 
 ReactDOM.createRoot(document.getElementById('app')!).render(
   <React.StrictMode>
-    <ProjectionApp />
+    <Routes />
   </React.StrictMode>,
 )

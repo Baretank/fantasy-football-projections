@@ -1,191 +1,167 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from backend.api.schemas import (
-    PlayerResponse, 
-    PlayerStats, 
-    ErrorResponse,
-    SuccessResponse
-)
+from typing import Dict, List, Optional, Any
+
 from backend.database.database import get_db
-from backend.services.data_service import DataService
-import logging
-
-logger = logging.getLogger(__name__)
-
-router = APIRouter()
-
-@router.get(
-    "",
-    response_model=List[PlayerResponse],
-    responses={
-        200: {
-            "description": "List of players matching the criteria",
-            "content": {
-                "application/json": {
-                    "example": [{
-                        "player_id": "123e4567-e89b-12d3-a456-426614174000",
-                        "name": "Patrick Mahomes",
-                        "team": "KC",
-                        "position": "QB"
-                    }]
-                }
-            }
-        },
-        500: {
-            "model": ErrorResponse,
-            "description": "Internal server error"
-        }
-    }
+from backend.services.query_service import QueryService
+from backend.services.cache_service import get_cache
+from backend.api.schemas import (
+    PlayerResponse,
+    PlayerStats,
+    PlayerSearchResponse,
+    OptimizedPlayerResponse,
+    PlayerListResponse
 )
+
+router = APIRouter(
+    prefix="/players",
+    tags=["players"]
+)
+
+@router.get("/", response_model=PlayerListResponse)
 async def get_players(
-    position: Optional[str] = Query(
-        None, 
-        description="Filter by position (QB, RB, WR, TE)",
-        example="QB"
-    ),
-    team: Optional[str] = Query(
-        None, 
-        description="Filter by team abbreviation",
-        example="KC"
-    ),
+    name: Optional[str] = None,
+    team: Optional[str] = None,
+    position: Optional[str] = None,
+    include_projections: bool = False,
+    include_stats: bool = False,
+    min_fantasy_points: Optional[float] = None,
+    page: int = Query(1, gt=0),
+    page_size: int = Query(20, gt=0, le=100),
+    sort_by: str = "name",
+    sort_dir: str = Query("asc", regex="^(asc|desc)$"),
     db: Session = Depends(get_db)
 ):
     """
-    Retrieve a list of players with optional position and team filters.
+    Get a paginated list of players with optional filters.
     
-    - **position**: Optional filter for player position
-    - **team**: Optional filter for team abbreviation
+    Optimized endpoint with pagination, sorting, and filtering options.
+    Can include projection and statistical data for each player.
     """
-    try:
-        data_service = DataService(db)
-        players = await data_service.get_players(position=position, team=team)
-        return players
-    except Exception as e:
-        logger.error(f"Error retrieving players: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error retrieving players"
-        )
-
-@router.get(
-    "/{player_id}",
-    response_model=PlayerResponse,
-    responses={
-        404: {
-            "model": ErrorResponse,
-            "description": "Player not found"
-        },
-        500: {
-            "model": ErrorResponse,
-            "description": "Internal server error"
+    service = QueryService(db)
+    
+    # Build filters
+    filters = {}
+    if name:
+        filters["name"] = name
+    if team:
+        filters["team"] = team
+    if position:
+        filters["position"] = position
+    if min_fantasy_points:
+        filters["min_fantasy_points"] = min_fantasy_points
+    
+    # Get players with pagination
+    players, total_count = await service.get_players_optimized(
+        filters=filters,
+        include_projections=include_projections,
+        include_stats=include_stats,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_dir=sort_dir
+    )
+    
+    # Calculate pagination info
+    total_pages = (total_count + page_size - 1) // page_size
+    has_next = page < total_pages
+    has_prev = page > 1
+    
+    return {
+        "players": players,
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "has_next": has_next,
+            "has_prev": has_prev
         }
     }
-)
+
+@router.get("/search", response_model=PlayerSearchResponse)
+async def search_players(
+    query: str = Query(..., min_length=2),
+    position: Optional[str] = None,
+    limit: int = Query(20, gt=0, le=100),
+    db: Session = Depends(get_db)
+):
+    """
+    Search for players by name with autocomplete functionality.
+    
+    Fast endpoint for player search with optional position filtering.
+    """
+    service = QueryService(db)
+    
+    players = await service.search_players(
+        search_term=query,
+        position=position,
+        limit=limit
+    )
+    
+    return {
+        "query": query,
+        "count": len(players),
+        "players": players
+    }
+
+@router.get("/{player_id}", response_model=OptimizedPlayerResponse)
 async def get_player(
-    player_id: str = Query(
-        ..., 
-        description="Unique player identifier",
-        example="123e4567-e89b-12d3-a456-426614174000"
-    ),
+    player_id: str,
     db: Session = Depends(get_db)
 ):
     """
-    Retrieve detailed information for a specific player.
+    Get detailed information about a specific player.
     
-    - **player_id**: Unique identifier for the player
+    Returns comprehensive player information with optimized query.
     """
-    try:
-        data_service = DataService(db)
-        player = await data_service.get_player(player_id)
-        if not player:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Player not found"
-            )
-        return player
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error retrieving player {player_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error retrieving player"
-        )
+    service = QueryService(db)
+    
+    # Get player with projected stats
+    result = await service.get_player_stats_optimized(
+        player_id=player_id
+    )
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Player not found")
+        
+    return result
 
-@router.get(
-    "/{player_id}/stats",
-    response_model=PlayerStats,
-    responses={
-        404: {
-            "model": ErrorResponse,
-            "description": "Player not found"
-        },
-        500: {
-            "model": ErrorResponse,
-            "description": "Internal server error"
-        }
-    }
-)
+@router.get("/{player_id}/stats", response_model=Dict[str, Any])
 async def get_player_stats(
-    player_id: str = Query(
-        ..., 
-        description="Unique player identifier",
-        example="123e4567-e89b-12d3-a456-426614174000"
-    ),
-    season: Optional[int] = Query(
-        None, 
-        description="Filter by season year",
-        example=2023
-    ),
+    player_id: str,
+    seasons: Optional[List[int]] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
-    Retrieve historical statistics for a player.
+    Get detailed statistics for a specific player.
     
-    - **player_id**: Unique identifier for the player
-    - **season**: Optional filter for specific season
+    Returns comprehensive statistical data for a player,
+    optionally filtered by seasons.
     """
-    try:
-        data_service = DataService(db)
+    service = QueryService(db)
+    
+    # Get player with stats for specified seasons
+    result = await service.get_player_stats_optimized(
+        player_id=player_id,
+        seasons=seasons
+    )
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Player not found")
         
-        # Get player info
-        player = await data_service.get_player(player_id)
-        if not player:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Player not found"
-            )
-            
-        # Get stats
-        stats = await data_service.get_player_stats(player_id, season)
-        
-        # Transform stats into structured dictionary
-        stats_dict = {}
-        for stat in stats:
-            if stat.season not in stats_dict:
-                stats_dict[stat.season] = {}
-            if stat.week:
-                if 'weeks' not in stats_dict[stat.season]:
-                    stats_dict[stat.season]['weeks'] = {}
-                if stat.week not in stats_dict[stat.season]['weeks']:
-                    stats_dict[stat.season]['weeks'][stat.week] = {}
-                stats_dict[stat.season]['weeks'][stat.week][stat.stat_type] = stat.value
-            else:
-                stats_dict[stat.season][stat.stat_type] = stat.value
-                
-        return PlayerStats(
-            player_id=player.player_id,
-            name=player.name,
-            team=player.team,
-            position=player.position,
-            stats=stats_dict
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error retrieving stats for player {player_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error retrieving player statistics"
-        )
+    return result
+
+@router.get("/seasons", response_model=List[int])
+async def get_available_seasons(
+    db: Session = Depends(get_db)
+):
+    """
+    Get list of seasons with available data.
+    
+    Returns a list of all seasons that have player data available.
+    """
+    service = QueryService(db)
+    
+    seasons = await service.get_available_seasons()
+    return seasons

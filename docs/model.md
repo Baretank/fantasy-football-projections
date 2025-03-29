@@ -686,7 +686,39 @@ The model's accuracy is validated through:
 4. Fill player analysis to identify model inconsistencies
 5. Expert review and adjustment
 
-## 9. Future Enhancements
+## 9. Projection Uncertainty and Confidence Intervals
+
+The model now incorporates statistical uncertainty and confidence intervals:
+
+### 9.1 Variance Calculation
+
+Each projected stat has an associated variance calculated using:
+
+1. Historical game-to-game variance when available
+2. Position-specific baseline variance coefficients
+3. Years of historical data (more years = lower variance)
+4. Position-specific consistency factors
+
+### 9.2 Confidence Intervals
+
+The system provides multiple confidence interval levels:
+
+- 50% intervals: Values with moderate likelihood
+- 80% intervals: Values with high likelihood (default)
+- 90% intervals: Values with very high likelihood
+- 95% intervals: Values with extremely high likelihood
+
+### 9.3 Rookie Projection Methodology
+
+Rookie projections use a specialized methodology combining:
+
+1. Historical comparisons with similar draft profile players
+2. Draft position adjustment factor
+3. Team context and opportunity assessment
+4. Position-specific model (QB, RB, WR, TE)
+5. Three-tiered projection system (high, medium, low)
+
+## 10. Future Enhancements
 
 Planned improvements include:
 
@@ -696,10 +728,11 @@ Planned improvements include:
 4. Player archetype classification for more accurate projections
 5. Injury impact modeling
 6. Additional scoring format support
+7. Time-series based uncertainty analysis
 
-## 10. Conclusion
+## 11. Conclusion
 
-This enhanced projection model combines statistical rigor with expert judgment through its sophisticated override system. The model maintains mathematical consistency while allowing for flexible adjustments based on changing circumstances, news, and expert analysis. By supporting multiple projection scenarios, the system enables comprehensive fantasy football analysis and decision-making.
+This enhanced projection model combines statistical rigor with expert judgment through its sophisticated override system. The model maintains mathematical consistency while allowing for flexible adjustments based on changing circumstances, news, and expert analysis. By supporting multiple projection scenarios, statistical uncertainty modeling, and team-level adjustments, the system enables comprehensive fantasy football analysis and decision-making.
 
 ## Appendix A: Statistical Formulas
 

@@ -1,365 +1,304 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
-from ..schemas import (
-    ProjectionResponse,
-    AdjustmentRequest,
-    ScenarioRequest,
-    ScenarioResponse,
-    ErrorResponse,
-    SuccessResponse
-)
-from ..database import get_db
-from ..services import ProjectionService
-import logging
 
-logger = logging.getLogger(__name__)
-router = APIRouter()
-
-@router.get(
-    "/player/{player_id}",
-    response_model=List[ProjectionResponse],
-    responses={
-        200: {
-            "description": "List of projections for the player",
-            "content": {
-                "application/json": {
-                    "example": [{
-                        "projection_id": "123e4567-e89b-12d3-a456-426614174000",
-                        "player_id": "789e0123-e89b-12d3-a456-426614174000",
-                        "season": 2024,
-                        "games": 17,
-                        "half_ppr": 280.5,
-                        "pass_attempts": 580,
-                        "completions": 375,
-                        "pass_yards": 4500,
-                        "pass_td": 35,
-                        "interceptions": 12
-                    }]
-                }
-            }
-        },
-        404: {
-            "model": ErrorResponse,
-            "description": "Player not found"
-        },
-        500: {
-            "model": ErrorResponse,
-            "description": "Internal server error"
-        }
-    }
+from backend.database.database import get_db
+from backend.services.projection_service import ProjectionService
+from backend.services.rookie_projection_service import RookieProjectionService
+from backend.services.projection_variance_service import ProjectionVarianceService
+from backend.services.team_stat_service import TeamStatService
+from backend.api.schemas import (
+    ProjectionResponse, 
+    ProjectionCreateRequest,
+    ProjectionAdjustRequest,
+    ProjectionRangeResponse,
+    RookieProjectionResponse,
+    TeamStatsResponse
 )
-async def get_player_projections(
-    player_id: str,
-    scenario_id: Optional[str] = Query(
-        None, 
-        description="Filter projections by scenario ID",
-        example="abc123-scenario-id"
-    ),
-    db: Session = Depends(get_db)
-):
-    """
-    Retrieve all projections for a specific player.
-    
-    Parameters:
-    - **player_id**: Unique identifier for the player
-    - **scenario_id**: Optional scenario ID to filter projections
-    
-    Returns a list of projections including baseline and scenario-specific projections.
-    """
-    try:
-        projection_service = ProjectionService(db)
-        projections = await projection_service.get_player_projections(
-            player_id=player_id,
-            scenario_id=scenario_id
-        )
-        return projections
-    except Exception as e:
-        logger.error(f"Error retrieving projections for player {player_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error retrieving projections"
-        )
 
-@router.post(
-    "/player/{player_id}/base",
-    response_model=ProjectionResponse,
-    status_code=status.HTTP_201_CREATED,
-    responses={
-        201: {
-            "description": "Base projection created successfully",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "projection_id": "123e4567-e89b-12d3-a456-426614174000",
-                        "player_id": "789e0123-e89b-12d3-a456-426614174000",
-                        "season": 2024,
-                        "games": 17,
-                        "half_ppr": 280.5
-                    }
-                }
-            }
-        },
-        400: {
-            "model": ErrorResponse,
-            "description": "Invalid request or unable to create projection"
-        },
-        404: {
-            "model": ErrorResponse,
-            "description": "Player not found"
-        },
-        500: {
-            "model": ErrorResponse,
-            "description": "Internal server error"
-        }
-    }
+router = APIRouter(
+    prefix="/projections",
+    tags=["projections"]
 )
-async def create_base_projection(
-    player_id: str,
-    season: int = Query(
-        ..., 
-        description="Season to project",
-        example=2024,
-        ge=2020,
-        le=2030
-    ),
-    db: Session = Depends(get_db)
-):
-    """
-    Create a new baseline projection for a player.
-    
-    Parameters:
-    - **player_id**: Unique identifier for the player
-    - **season**: NFL season year to project
-    
-    Creates a baseline projection using historical data and team context.
-    """
-    try:
-        projection_service = ProjectionService(db)
-        projection = await projection_service.create_base_projection(
-            player_id=player_id,
-            season=season
-        )
-        if not projection:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Could not create base projection"
-            )
-        return projection
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error creating base projection for player {player_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error creating projection"
-        )
 
-@router.put(
-    "/{projection_id}",
-    response_model=ProjectionResponse,
-    responses={
-        200: {
-            "description": "Projection updated successfully",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "projection_id": "123e4567-e89b-12d3-a456-426614174000",
-                        "player_id": "789e0123-e89b-12d3-a456-426614174000",
-                        "season": 2024,
-                        "games": 17,
-                        "half_ppr": 295.2,
-                        "adjustments": {
-                            "snap_share": 1.1,
-                            "target_share": 1.05
-                        }
-                    }
-                }
-            }
-        },
-        404: {
-            "model": ErrorResponse,
-            "description": "Projection not found"
-        },
-        422: {
-            "model": ErrorResponse,
-            "description": "Invalid adjustment values"
-        },
-        500: {
-            "model": ErrorResponse,
-            "description": "Internal server error"
-        }
-    }
-)
-async def update_projection(
+@router.get("/{projection_id}", response_model=ProjectionResponse)
+async def get_projection(
     projection_id: str,
-    request: AdjustmentRequest,
     db: Session = Depends(get_db)
 ):
-    """
-    Update a projection with adjustments.
+    """Get a specific projection by ID."""
+    service = ProjectionService(db)
+    projection = await service.get_projection(projection_id)
     
-    Parameters:
-    - **projection_id**: Unique identifier for the projection
-    - **request**: Adjustment factors for various metrics
-    
-    Adjustments can modify usage rates, efficiency metrics, and scoring rates.
-    All adjustments are validated for reasonableness before applying.
-    """
-    try:
-        projection_service = ProjectionService(db)
-        projection = await projection_service.update_projection(
-            projection_id=projection_id,
-            adjustments=request.adjustments
-        )
-        if not projection:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Projection not found or update failed"
-            )
-        return projection
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e)
-        )
-    except Exception as e:
-        logger.error(f"Error updating projection {projection_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error updating projection"
-        )
+    if not projection:
+        raise HTTPException(status_code=404, detail="Projection not found")
+        
+    return projection
 
-@router.post(
-    "/scenarios",
-    response_model=ScenarioResponse,
-    status_code=status.HTTP_201_CREATED,
-    responses={
-        201: {
-            "description": "Scenario created successfully",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "scenario_id": "abc123-scenario-id",
-                        "name": "High Usage Scenario",
-                        "description": "Increased snap counts and target share",
-                        "created_at": "2024-02-15T12:00:00Z"
-                    }
-                }
-            }
-        },
-        400: {
-            "model": ErrorResponse,
-            "description": "Invalid request"
-        },
-        500: {
-            "model": ErrorResponse,
-            "description": "Internal server error"
-        }
-    }
-)
-async def create_scenario(
-    request: ScenarioRequest,
+@router.get("/", response_model=List[ProjectionResponse])
+async def get_projections(
+    player_id: Optional[str] = None,
+    team: Optional[str] = None,
+    season: Optional[int] = None,
+    scenario_id: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """
-    Create a new projection scenario.
+    """Get projections with optional filters."""
+    service = ProjectionService(db)
+    projections = await service.get_player_projections(
+        player_id=player_id,
+        team=team,
+        season=season,
+        scenario_id=scenario_id
+    )
     
-    Parameters:
-    - **name**: Name of the scenario
-    - **description**: Optional description of the scenario
-    - **base_scenario_id**: Optional ID of the parent scenario
-    
-    Scenarios allow for what-if analysis and alternative projection modeling.
-    """
-    try:
-        projection_service = ProjectionService(db)
-        scenario_id = await projection_service.create_scenario(
-            name=request.name,
-            description=request.description,
-            base_scenario_id=request.base_scenario_id
-        )
-        if not scenario_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Could not create scenario"
-            )
-        return {"scenario_id": scenario_id}
-    except Exception as e:
-        logger.error(f"Error creating scenario: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error creating scenario"
-        )
+    return projections
 
-@router.put(
-    "/team/{team}/adjustments",
-    response_model=SuccessResponse,
-    responses={
-        200: {
-            "description": "Team adjustments applied successfully",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "success",
-                        "updated_count": 5,
-                        "message": "Team adjustments applied successfully"
-                    }
-                }
-            }
-        },
-        400: {
-            "model": ErrorResponse,
-            "description": "Invalid adjustments"
-        },
-        500: {
-            "model": ErrorResponse,
-            "description": "Internal server error"
-        }
-    }
-)
-async def apply_team_adjustments(
-    team: str = Query(..., description="Team abbreviation", example="KC"),
-    season: int = Query(
-        ..., 
-        description="Season to adjust",
-        example=2024,
-        ge=2020,
-        le=2030
-    ),
-    request: AdjustmentRequest = None,
+@router.post("/create", response_model=ProjectionResponse)
+async def create_projection(
+    request: ProjectionCreateRequest,
+    db: Session = Depends(get_db)
+):
+    """Create a new baseline projection."""
+    service = ProjectionService(db)
+    projection = await service.create_base_projection(
+        player_id=request.player_id,
+        season=request.season
+    )
+    
+    if not projection:
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to create projection"
+        )
+        
+    return projection
+
+@router.put("/{projection_id}/adjust", response_model=ProjectionResponse)
+async def adjust_projection(
+    projection_id: str,
+    adjustments: ProjectionAdjustRequest,
+    db: Session = Depends(get_db)
+):
+    """Update a projection with adjustments."""
+    service = ProjectionService(db)
+    projection = await service.update_projection(
+        projection_id=projection_id,
+        adjustments=adjustments.adjustments
+    )
+    
+    if not projection:
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to adjust projection"
+        )
+        
+    return projection
+
+@router.get("/{projection_id}/range", response_model=ProjectionRangeResponse)
+async def get_projection_range(
+    projection_id: str,
+    confidence: float = Query(0.80, ge=0.5, le=0.99),
+    create_scenarios: bool = False,
     db: Session = Depends(get_db)
 ):
     """
-    Apply team-level adjustments to all affected players.
+    Generate projection ranges (low/median/high) with confidence intervals.
     
-    Parameters:
-    - **team**: Team abbreviation
-    - **season**: Season to adjust
-    - **request**: Adjustment factors to apply
-    
-    Team adjustments maintain mathematical consistency across all affected players.
+    - confidence: Confidence level (0.5-0.99)
+    - create_scenarios: If true, create scenario projections for each range
     """
-    try:
-        projection_service = ProjectionService(db)
-        updated = await projection_service.apply_team_adjustments(
-            team=team,
-            season=season,
-            adjustments=request.adjustments
-        )
-        return SuccessResponse(
-            status="success",
-            message="Team adjustments applied successfully",
-            data={"updated_count": len(updated)}
-        )
-    except ValueError as e:
+    service = ProjectionVarianceService(db)
+    proj_range = await service.generate_projection_range(
+        projection_id=projection_id,
+        confidence=confidence,
+        scenarios=create_scenarios
+    )
+    
+    if not proj_range:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=400,
+            detail="Failed to generate projection range"
         )
-    except Exception as e:
-        logger.error(f"Error applying team adjustments for {team}: {str(e)}")
+        
+    return proj_range
+
+@router.get("/{projection_id}/variance", response_model=Dict)
+async def get_projection_variance(
+    projection_id: str,
+    use_historical: bool = True,
+    db: Session = Depends(get_db)
+):
+    """
+    Get variance statistics and confidence intervals for a projection.
+    
+    - use_historical: If true, use historical game-to-game variance
+    """
+    service = ProjectionVarianceService(db)
+    variance_data = await service.calculate_variance(
+        projection_id=projection_id,
+        use_historical=use_historical
+    )
+    
+    if not variance_data:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error applying team adjustments"
+            status_code=400,
+            detail="Failed to calculate variance"
         )
+        
+    return variance_data
+
+@router.post("/rookies/create", response_model=Dict)
+async def create_rookie_projections(
+    season: int = Query(..., ge=2023),
+    scenario_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Create projections for all rookies in the rookies.json file.
+    
+    - season: The season year to project
+    - scenario_id: Optional scenario ID to associate with the projections
+    """
+    service = RookieProjectionService(db)
+    success_count, errors = await service.create_rookie_projections(
+        season=season,
+        scenario_id=scenario_id
+    )
+    
+    if success_count == 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to create rookie projections: {errors[0] if errors else 'Unknown error'}"
+        )
+        
+    return {
+        "success": True,
+        "count": success_count,
+        "errors": errors
+    }
+
+@router.put("/rookies/{player_id}/enhance", response_model=RookieProjectionResponse)
+async def enhance_rookie_projection(
+    player_id: str,
+    comp_level: str = Query("medium", regex="^(high|medium|low)$"),
+    playing_time_pct: float = Query(0.5, ge=0.0, le=1.0),
+    season: int = Query(..., ge=2023),
+    db: Session = Depends(get_db)
+):
+    """
+    Enhance a rookie projection with more sophisticated modeling.
+    
+    - player_id: The rookie player ID
+    - comp_level: Comparison level (high, medium, low)
+    - playing_time_pct: Expected playing time percentage (0.0-1.0)
+    - season: The season year
+    """
+    service = RookieProjectionService(db)
+    projection = await service.enhance_rookie_projection(
+        player_id=player_id,
+        comp_level=comp_level,
+        playing_time_pct=playing_time_pct,
+        season=season
+    )
+    
+    if not projection:
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to enhance rookie projection"
+        )
+        
+    return projection
+
+@router.put("/team/{team}/adjust", response_model=List[ProjectionResponse])
+async def adjust_team_projections(
+    team: str,
+    season: int = Query(..., ge=2023),
+    adjustments: Dict[str, float] = None,
+    player_shares: Optional[Dict[str, Dict[str, float]]] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Apply team-level adjustments to all affected player projections.
+    
+    - team: The team code (e.g., 'LAR')
+    - season: The season year
+    - adjustments: Adjustment factors for team-level metrics
+      (e.g., {"pass_volume": 1.1, "rush_volume": 0.9})
+    - player_shares: Optional player-specific distribution changes
+      (e.g., {"player_id": {"targets": 0.25}})
+    """
+    service = TeamStatService(db)
+    
+    if not adjustments and not player_shares:
+        raise HTTPException(
+            status_code=400,
+            detail="Must provide either adjustments or player_shares"
+        )
+        
+    updated_projections = await service.apply_team_adjustments(
+        team=team,
+        season=season,
+        adjustments=adjustments or {},
+        player_shares=player_shares
+    )
+    
+    if not updated_projections:
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to apply team adjustments"
+        )
+        
+    return updated_projections
+
+@router.get("/team/{team}/usage", response_model=Dict)
+async def get_team_usage_breakdown(
+    team: str,
+    season: int = Query(..., ge=2023),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a breakdown of team usage by position group and player.
+    
+    - team: The team code (e.g., 'LAR')
+    - season: The season year
+    """
+    service = TeamStatService(db)
+    usage_data = await service.get_team_usage_breakdown(
+        team=team,
+        season=season
+    )
+    
+    if not usage_data:
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to retrieve team usage breakdown"
+        )
+        
+    return usage_data
+
+@router.get("/team/{team}/stats", response_model=TeamStatsResponse)
+async def get_team_stats(
+    team: str,
+    season: int = Query(..., ge=2023),
+    db: Session = Depends(get_db)
+):
+    """
+    Get team-level offensive statistics.
+    
+    - team: The team code (e.g., 'LAR')
+    - season: The season year
+    """
+    service = TeamStatService(db)
+    stats = await service.get_team_stats(
+        team=team,
+        season=season
+    )
+    
+    if not stats or len(stats) == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Team stats not found"
+        )
+        
+    return stats[0]

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import Dict, List, Optional, Union, Any
 from datetime import datetime
 
@@ -206,3 +206,156 @@ class SuccessResponse(BaseModel):
     status: str = Field("success", description="Operation status")
     message: Optional[str] = Field(None, description="Success message")
     data: Optional[Dict] = Field(None, description="Response data")
+
+class ProjectionCreateRequest(BaseModel):
+    """Request to create a new projection."""
+    player_id: str = Field(..., description="Player ID")
+    season: int = Field(..., description="Season year")
+
+class ProjectionAdjustRequest(BaseModel):
+    """Request to adjust a projection."""
+    adjustments: Dict[str, float] = Field(
+        ..., 
+        description="Adjustment factors for projection metrics"
+    )
+
+class ProjectionRangeResponse(BaseModel):
+    """Response for projection range endpoints."""
+    base: Dict[str, Any] = Field(..., description="Base projection values")
+    low: Dict[str, Any] = Field(..., description="Low-end projection values")
+    median: Dict[str, Any] = Field(..., description="Median projection values")
+    high: Dict[str, Any] = Field(..., description="High-end projection values")
+    scenario_ids: Optional[Dict[str, str]] = Field(None, description="IDs of created scenarios")
+
+class RookieProjectionResponse(ProjectionResponse):
+    """Response for rookie projection endpoints."""
+    comp_level: Optional[str] = Field(None, description="Comparison level used")
+    playing_time_pct: Optional[float] = Field(None, description="Playing time percentage")
+
+class TeamStatsResponse(BaseModel):
+    """Team statistics response."""
+    team_stat_id: str = Field(..., description="Unique identifier")
+    team: str = Field(..., description="Team abbreviation")
+    season: int = Field(..., description="Season year")
+    
+    # Core offensive metrics
+    plays: float = Field(..., description="Total offensive plays")
+    pass_percentage: float = Field(..., description="Percentage of pass plays")
+    pass_attempts: float = Field(..., description="Season pass attempts")
+    pass_yards: float = Field(..., description="Season pass yards")
+    pass_td: float = Field(..., description="Season pass TDs")
+    pass_td_rate: float = Field(..., description="TD rate on pass attempts")
+    rush_attempts: float = Field(..., description="Season rush attempts")
+    rush_yards: float = Field(..., description="Season rush yards")
+    rush_td: float = Field(..., description="Season rush TDs")
+    carries: float = Field(..., description="Total RB carries")
+    rush_yards_per_carry: float = Field(..., description="Yards per carry")
+    targets: float = Field(..., description="Total targets")
+    receptions: float = Field(..., description="Total receptions")
+    rec_yards: float = Field(..., description="Total receiving yards")
+    rec_td: float = Field(..., description="Total receiving TDs")
+    rank: int = Field(..., description="Offensive ranking")
+    
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class ConfidenceIntervalResponse(BaseModel):
+    """Response for variance and confidence interval endpoints."""
+    mean: float = Field(..., description="Mean projected value")
+    std_dev: float = Field(..., description="Standard deviation")
+    coef_var: float = Field(..., description="Coefficient of variation")
+    intervals: Dict[str, Dict[str, float]] = Field(
+        ..., 
+        description="Confidence intervals at different levels"
+    )
+
+class BatchProjectionCreateRequest(BaseModel):
+    """Request to create projections for multiple players."""
+    player_ids: List[str] = Field(..., description="List of player IDs")
+    season: int = Field(..., description="Season year")
+    scenario_id: Optional[str] = Field(None, description="Optional scenario ID")
+
+class BatchProjectionAdjustRequest(BaseModel):
+    """Request to adjust multiple projections."""
+    adjustments: Dict[str, Dict[str, float]] = Field(
+        ..., 
+        description="Map of projection IDs to adjustment values",
+        example={
+            "projection_id1": {"target_share": 1.1, "td_rate": 0.9},
+            "projection_id2": {"snap_share": 0.8}
+        }
+    )
+
+class ScenarioTemplate(BaseModel):
+    """Template for creating a scenario."""
+    name: str = Field(..., description="Scenario name")
+    description: Optional[str] = Field(None, description="Scenario description")
+    base_scenario_id: Optional[str] = Field(None, description="Base scenario ID to clone from")
+    adjustments: Optional[Dict[str, float]] = Field(None, description="Global adjustments")
+    player_adjustments: Optional[Dict[str, Dict[str, float]]] = Field(
+        None, 
+        description="Player-specific adjustments",
+        example={
+            "player_id1": {"target_share": 1.2},
+            "player_id2": {"rush_share": 0.9}
+        }
+    )
+
+class BatchScenarioCreateRequest(BaseModel):
+    """Request to create multiple scenarios."""
+    scenarios: List[ScenarioTemplate] = Field(..., description="List of scenario templates")
+
+class ExportFiltersRequest(BaseModel):
+    """Filters for exporting projections."""
+    filters: Optional[Dict[str, Any]] = Field(
+        None, 
+        description="Export filters",
+        example={
+            "team": "SF",
+            "position": ["QB", "RB"],
+            "season": 2024
+        }
+    )
+
+class BatchResponse(BaseModel):
+    """Standard response for batch operations."""
+    success: int = Field(..., description="Number of successful operations")
+    failure: int = Field(..., description="Number of failed operations")
+    failed_players: Optional[List[Dict[str, Any]]] = Field(None, description="Details of failed operations")
+    failed_projections: Optional[List[Dict[str, Any]]] = Field(None, description="Details of failed projection operations")
+    failed_scenarios: Optional[List[Dict[str, Any]]] = Field(None, description="Details of failed scenario operations")
+    projection_ids: Optional[Dict[str, str]] = Field(None, description="Map of player IDs to created projection IDs")
+    scenario_ids: Optional[Dict[str, str]] = Field(None, description="Map of scenario names to created scenario IDs")
+    error: Optional[str] = Field(None, description="Error message if all operations failed")
+
+class PaginationInfo(BaseModel):
+    """Pagination information."""
+    page: int
+    page_size: int
+    total_count: int
+    total_pages: int
+    has_next: bool
+    has_prev: bool
+
+class OptimizedPlayerResponse(BaseModel):
+    """Optimized player response with flexible stats structure."""
+    player_id: str
+    name: str
+    team: str
+    position: str
+    stats: Optional[Dict[str, Any]] = None
+    projection: Optional[Dict[str, Any]] = None
+
+class PlayerListResponse(BaseModel):
+    """Response for player listing endpoint."""
+    players: List[Dict[str, Any]]
+    pagination: PaginationInfo
+
+class PlayerSearchResponse(BaseModel):
+    """Response for player search endpoint."""
+    query: str
+    count: int
+    players: List[Dict[str, Any]]

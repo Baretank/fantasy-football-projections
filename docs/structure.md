@@ -14,6 +14,7 @@ fantasy-football-projections/
 │   ├── __init__.py
 │   ├── main.py              # FastAPI entry point
 │   ├── environment.yml      # Conda environment config
+│   ├── nextsteps.md         # Development roadmap
 │   ├── database/
 │   │   ├── __init__.py
 │   │   ├── init_db.py       # Database initialization
@@ -29,19 +30,26 @@ fantasy-football-projections/
 │   │       ├── players.py   # Player endpoints
 │   │       ├── projections.py # Projection endpoints
 │   │       ├── overrides.py # Manual override endpoints
-│   │       └── scenarios.py # Scenario management endpoints
+│   │       ├── scenarios.py # Scenario management endpoints
+│   │       └── batch.py     # Batch operations endpoints
 │   ├── scripts/
 │   │   ├── README.md
 │   │   ├── upload_season.py # Import seasonal data
 │   │   └── convert_rookies.py # Import rookie data
 │   ├── services/
 │   │   ├── __init__.py
-│   │   ├── projection_service.py  # Projection calculations
-│   │   ├── data_import_service.py # Data import handling
-│   │   ├── data_service.py        # Data retrieval
-│   │   ├── team_stat_service.py   # Team statistics
-│   │   ├── override_service.py    # Manual overrides
-│   │   └── scenario_service.py    # Scenario management
+│   │   ├── projection_service.py     # Projection calculations
+│   │   ├── data_import_service.py    # Data import handling
+│   │   ├── data_service.py           # Data retrieval
+│   │   ├── data_validation.py        # Data validation
+│   │   ├── team_stat_service.py      # Team statistics
+│   │   ├── override_service.py       # Manual overrides
+│   │   ├── scenario_service.py       # Scenario management
+│   │   ├── cache_service.py          # Caching service
+│   │   ├── batch_service.py          # Batch operations
+│   │   ├── query_service.py          # Optimized database queries
+│   │   ├── rookie_projection_service.py  # Rookie projections
+│   │   └── projection_variance_service.py # Projection uncertainty
 │   └── tests/
 │       ├── __init__.py
 │       ├── conftest.py            # Test fixtures
@@ -50,6 +58,7 @@ fantasy-football-projections/
 │       │   ├── test_projection_service.py
 │       │   ├── test_data_service.py
 │       │   ├── test_team_stat_service.py
+│       │   ├── test_data_validation.py
 │       │   └── test_data_import_service.py
 │       ├── integration/           # Integration tests
 │       │   ├── __init__.py
@@ -61,18 +70,48 @@ fantasy-football-projections/
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── playerselect.tsx     # Player selection
+│   │   │   ├── playerselect.tsx       # Player selection
 │   │   │   ├── counter.ts
+│   │   │   ├── dashboard.tsx          # Dashboard component
 │   │   │   ├── projectionadjuster.tsx # Adjusting projections
-│   │   │   └── statsdisplay.tsx     # Displaying stats
+│   │   │   ├── statsdisplay.tsx       # Displaying stats
+│   │   │   ├── teamadjuster.tsx       # Team adjustments
+│   │   │   ├── scenariomanager.tsx    # Scenario management
+│   │   │   ├── ui/                    # UI components
+│   │   │   │   ├── button.tsx
+│   │   │   │   ├── card.tsx
+│   │   │   │   ├── dialog.tsx
+│   │   │   │   ├── input.tsx
+│   │   │   │   ├── label.tsx
+│   │   │   │   ├── scroll-area.tsx
+│   │   │   │   ├── select.tsx
+│   │   │   │   ├── separator.tsx
+│   │   │   │   ├── slider.tsx
+│   │   │   │   ├── table.tsx
+│   │   │   │   ├── tabs.tsx
+│   │   │   │   └── badge.tsx
+│   │   │   ├── layout/               # Layout components
+│   │   │   │   └── AppLayout.tsx
+│   │   │   ├── navigation/           # Navigation components
+│   │   │   │   └── MainNav.tsx
+│   │   │   └── visualization/        # Visualization components
+│   │   │       └── ProjectionRangeChart.tsx
+│   │   ├── pages/                    # Page components
+│   │   │   ├── DashboardPage.tsx
+│   │   │   ├── ComparePage.tsx
+│   │   │   └── NotFoundPage.tsx  
 │   │   ├── services/
-│   │   │   └── api.ts              # API client
+│   │   │   └── api.ts                # API client
 │   │   ├── types/
-│   │   │   └── index.ts            # TypeScript types
+│   │   │   └── index.ts              # TypeScript types
 │   │   ├── utils/
-│   │   │   └── calculatioms.ts     # Utility functions
-│   │   ├── main.ts
-│   │   └── style.css
+│   │   │   └── calculatioms.ts       # Utility functions
+│   │   ├── lib/
+│   │   │   └── utils.ts              # Helper functions
+│   │   ├── routes.tsx                # Application routes
+│   │   ├── ProjectionApp.tsx         # Main app component
+│   │   ├── main.tsx                  # Entry point
+│   │   └── style.css                 # Global styles
 │   ├── public/
 │   │   └── vite.svg
 │   ├── index.html
@@ -108,10 +147,16 @@ fantasy-football-projections/
 
 - **DataService**: Player and statistical data retrieval
 - **DataImportService**: Data import from external sources
+- **DataValidationService**: Data validation and verification
 - **ProjectionService**: Core projection calculations
-- **TeamStatsService**: Team-level statistics management
+- **TeamStatService**: Team-level statistics management
+- **RookieProjectionService**: Specialized rookie projections
+- **ProjectionVarianceService**: Uncertainty and confidence intervals
 - **OverrideService**: Manual overrides handling
 - **ScenarioService**: Scenario creation and comparison
+- **BatchService**: Batch operations for multiple entities
+- **CacheService**: Caching for performance optimization
+- **QueryService**: Optimized database queries
 
 ### API Endpoints (`/backend/api/routes/`)
 
@@ -119,12 +164,25 @@ fantasy-football-projections/
 - **projections.py**: Projection creation and retrieval
 - **overrides.py**: Manual override management
 - **scenarios.py**: Scenario planning and comparison
+- **batch.py**: Batch operations and data export
+
+### Frontend Pages and Views (`/frontend/src/pages/`)
+
+- **DashboardPage.tsx**: Main dashboard with analytics overview
+- **ComparePage.tsx**: Side-by-side player comparison tool
+- **NotFoundPage.tsx**: 404 error handling
 
 ### Frontend Components (`/frontend/src/components/`)
 
+- **layout/AppLayout.tsx**: Main application layout with navigation
+- **navigation/MainNav.tsx**: Primary navigation component
 - **playerselect.tsx**: Player selection component
 - **projectionadjuster.tsx**: Adjusting projection values
 - **statsdisplay.tsx**: Statistical data visualization
+- **teamadjuster.tsx**: Team-level adjustments
+- **scenariomanager.tsx**: Managing projection scenarios
+- **dashboard.tsx**: Dashboard component with analytics
+- **visualization/ProjectionRangeChart.tsx**: Confidence interval charts
 
 ## Key Features
 
