@@ -1,8 +1,8 @@
-# Enhanced Fantasy Football Statistical Projection Model: Technical Implementation and Methodology
+# Fantasy Football Statistical Projection Model: Technical Implementation and Methodology
 
 ## Abstract
 
-This document details our enhanced statistical model for projecting fantasy football player performance. The model incorporates team-level offensive metrics, individual player efficiency patterns, and a sophisticated system for manual overrides to generate accurate fantasy point projections. By leveraging multi-year historical data, regression analysis, and allowing for scenario-based adjustments, the system provides a flexible framework for fantasy football analysis and decision-making that combines statistical rigor with expert judgment.
+This document details our statistical model for projecting fantasy football player performance. The model incorporates team-level offensive metrics, individual player efficiency patterns, and a sophisticated system for manual overrides to generate accurate fantasy point projections. By leveraging multi-year historical data, regression analysis, and allowing for scenario-based adjustments, the system provides a flexible framework for fantasy football analysis and decision-making that combines statistical rigor with expert judgment.
 
 ## 1. Introduction
 
