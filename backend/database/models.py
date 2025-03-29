@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Float, String, ForeignKey, DateTime, JSON
+from sqlalchemy import Column, Integer, Float, String, ForeignKey, DateTime, JSON, Boolean
 from sqlalchemy.orm import relationship, mapped_column, Mapped
 from datetime import datetime
 from typing import Dict, Optional
@@ -67,6 +67,7 @@ class Player(Base):
     game_stats = relationship("GameStats", back_populates="player")
     base_stats = relationship("BaseStat", back_populates="player")
     projections = relationship("Projection", back_populates="player")
+    stat_overrides = relationship("StatOverride", back_populates="player")
 
 class BaseStat(Base):
     """Historical and baseline statistics"""
@@ -142,7 +143,7 @@ class Projection(Base):
 
     projection_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     player_id: Mapped[str] = mapped_column(ForeignKey("players.player_id"), nullable=False)
-    scenario_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    scenario_id: Mapped[Optional[str]] = mapped_column(ForeignKey("scenarios.scenario_id"), nullable=True)
     season: Mapped[int] = mapped_column(Integer, nullable=False)
     games: Mapped[int] = mapped_column(Integer, nullable=False)
     
@@ -156,10 +157,26 @@ class Projection(Base):
     pass_td: Mapped[Optional[float]] = mapped_column(Float)
     interceptions: Mapped[Optional[float]] = mapped_column(Float)
     
+    # Enhanced passing stats
+    gross_pass_yards: Mapped[Optional[float]] = mapped_column(Float)
+    sacks: Mapped[Optional[float]] = mapped_column(Float)
+    sack_yards: Mapped[Optional[float]] = mapped_column(Float)
+    net_pass_yards: Mapped[Optional[float]] = mapped_column(Float)
+    pass_td_rate: Mapped[Optional[float]] = mapped_column(Float)
+    int_rate: Mapped[Optional[float]] = mapped_column(Float)
+    sack_rate: Mapped[Optional[float]] = mapped_column(Float)
+    
     # Rushing stats (All positions)
     carries: Mapped[Optional[float]] = mapped_column(Float)
     rush_yards: Mapped[Optional[float]] = mapped_column(Float)
     rush_td: Mapped[Optional[float]] = mapped_column(Float)
+    
+    # Enhanced rushing stats
+    gross_rush_yards: Mapped[Optional[float]] = mapped_column(Float)
+    fumbles: Mapped[Optional[float]] = mapped_column(Float)
+    fumble_rate: Mapped[Optional[float]] = mapped_column(Float)
+    net_rush_yards: Mapped[Optional[float]] = mapped_column(Float)
+    rush_td_rate: Mapped[Optional[float]] = mapped_column(Float)
     
     # Receiving stats (RB, WR, TE)
     targets: Mapped[Optional[float]] = mapped_column(Float)
@@ -173,11 +190,30 @@ class Projection(Base):
     rush_share: Mapped[Optional[float]] = mapped_column(Float)
     redzone_share: Mapped[Optional[float]] = mapped_column(Float)
     
+    # Efficiency metrics
+    pass_att_pct: Mapped[Optional[float]] = mapped_column(Float)  # % of team pass attempts
+    comp_pct: Mapped[Optional[float]] = mapped_column(Float)      # completion percentage
+    yards_per_att: Mapped[Optional[float]] = mapped_column(Float) # gross YPA
+    net_yards_per_att: Mapped[Optional[float]] = mapped_column(Float) # net YPA
+    car_pct: Mapped[Optional[float]] = mapped_column(Float)       # % of team rush attempts
+    yards_per_carry: Mapped[Optional[float]] = mapped_column(Float) # gross YPC
+    net_yards_per_carry: Mapped[Optional[float]] = mapped_column(Float) # net YPC
+    tar_pct: Mapped[Optional[float]] = mapped_column(Float)       # % of team targets
+    catch_pct: Mapped[Optional[float]] = mapped_column(Float)     # catch rate
+    yards_per_target: Mapped[Optional[float]] = mapped_column(Float) # YPT
+    rec_td_rate: Mapped[Optional[float]] = mapped_column(Float)   # TD% on targets
+    
+    # Override tracking
+    has_overrides: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_fill_player: Mapped[bool] = mapped_column(Boolean, default=False)
+    
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     player = relationship("Player", back_populates="projections")
+    scenario = relationship("Scenario", back_populates="projections")
+    stat_overrides = relationship("StatOverride", back_populates="projection")
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'Projection':
@@ -215,22 +251,28 @@ class Projection(Base):
         return cls(**base)
 
     def calculate_fantasy_points(self) -> float:
-        """Calculate half-PPR fantasy points"""
+        """Calculate half-PPR fantasy points with enhanced accuracy"""
         points = 0.0
         
-        # Passing points
-        if self.pass_yards:
-            points += (self.pass_yards / 25.0)  # 0.04 points per passing yard
+        # Passing points - use net passing yards if available
+        pass_yards = self.net_pass_yards if self.net_pass_yards is not None else self.pass_yards
+        if pass_yards:
+            points += (pass_yards / 25.0)  # 0.04 points per passing yard
         if self.pass_td:
             points += (self.pass_td * 4.0)
         if self.interceptions:
             points -= (self.interceptions * 2.0)
             
-        # Rushing points
-        if self.rush_yards:
-            points += (self.rush_yards / 10.0)  # 0.1 points per rushing yard
+        # Rushing points - use net rushing yards if available
+        rush_yards = self.net_rush_yards if self.net_rush_yards is not None else self.rush_yards
+        if rush_yards:
+            points += (rush_yards / 10.0)  # 0.1 points per rushing yard
         if self.rush_td:
             points += (self.rush_td * 6.0)
+        
+        # Fumble penalty
+        if self.fumbles:
+            points -= (self.fumbles * 2.0)
             
         # Receiving points
         if self.receptions:
@@ -249,6 +291,27 @@ class Scenario(Base):
     scenario_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String)
+    is_baseline: Mapped[bool] = mapped_column(Boolean, default=False) 
     base_scenario_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    projections = relationship("Projection", back_populates="scenario")
+
+class StatOverride(Base):
+    """Track manual overrides to projection values"""
+    __tablename__ = "stat_overrides"
+    
+    override_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    player_id: Mapped[str] = mapped_column(ForeignKey("players.player_id"), nullable=False)
+    projection_id: Mapped[str] = mapped_column(ForeignKey("projections.projection_id"), nullable=False)
+    stat_name: Mapped[str] = mapped_column(String, nullable=False)
+    calculated_value: Mapped[float] = mapped_column(Float, nullable=False)
+    manual_value: Mapped[float] = mapped_column(Float, nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    player = relationship("Player", back_populates="stat_overrides")
+    projection = relationship("Projection", back_populates="stat_overrides")

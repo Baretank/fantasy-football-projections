@@ -1,9 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from backend.api.routes import players_router, projections_router
+from backend.api.routes import players_router, projections_router, overrides_router, scenarios_router
 from backend.database import Base, engine
-from backend.services import TeamStatsService  # Add new import
+from backend.services import TeamStatsService
 import logging
 from pathlib import Path
 
@@ -24,13 +24,14 @@ app = FastAPI(
     
     * Player statistics and metadata
     * Statistical projections
-    * Scenario planning
+    * Manual overrides and adjustments
+    * Scenario planning and comparison
     * Team-level adjustments
     * Historical data analysis
     
     For detailed documentation, visit the /docs endpoint.
     """,
-    version="0.1.0",
+    version="0.2.0",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json"
@@ -48,6 +49,8 @@ app.add_middleware(
 # Include routers
 app.include_router(players_router, prefix="/api/players", tags=["players"])
 app.include_router(projections_router, prefix="/api/projections", tags=["projections"])
+app.include_router(overrides_router, prefix="/api/overrides", tags=["overrides"])
+app.include_router(scenarios_router, prefix="/api/scenarios", tags=["scenarios"])
 
 # Ensure data directory exists
 data_dir = Path("data")
