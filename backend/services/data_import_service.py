@@ -6,7 +6,8 @@ import pandas as pd
 import logging
 import asyncio
 import random
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 import uuid
 import json
 import requests
@@ -17,12 +18,52 @@ from backend.database.models import Player, BaseStat, TeamStat, GameStats
 
 logger = logging.getLogger(__name__)
 
+class CircuitBreaker:
+    """Simple circuit breaker to prevent excessive requests during rate limiting."""
+    def __init__(self, failure_threshold: int = 3, reset_timeout: int = 300):
+        self.failure_threshold = failure_threshold
+        self.reset_timeout = reset_timeout  # seconds
+        self.failure_count = 0
+        self.open_since = None
+        
+    def record_failure(self):
+        """Record a failure and potentially open the circuit."""
+        self.failure_count += 1
+        if self.failure_count >= self.failure_threshold:
+            self.open_circuit()
+            
+    def open_circuit(self):
+        """Open the circuit, preventing further requests."""
+        self.open_since = datetime.now()
+        logger.warning(f"Circuit breaker opened. Pausing requests for {self.reset_timeout} seconds.")
+        
+    def reset(self):
+        """Reset the circuit breaker."""
+        self.failure_count = 0
+        self.open_since = None
+        
+    def is_open(self) -> bool:
+        """Check if the circuit is currently open."""
+        if self.open_since is None:
+            return False
+            
+        # Check if we've waited long enough to try again
+        elapsed = (datetime.now() - self.open_since).total_seconds()
+        if elapsed >= self.reset_timeout:
+            logger.info("Circuit breaker reset after timeout.")
+            self.reset()
+            return False
+            
+        return True
+
 class DataImportService:
     def __init__(self, db: Session):
         self.db = db
         self.positions = ['QB', 'RB', 'WR', 'TE']
         self.min_delay = 0.8  # 800ms minimum delay between requests
         self.max_delay = 1.2  # 1.2s maximum delay
+        self.request_semaphore = asyncio.Semaphore(3)  # Max 3 concurrent requests
+        self.circuit_breaker = CircuitBreaker(failure_threshold=5, reset_timeout=120)
         
         # Raw stat mappings - only counting/volume stats
         self.stat_mappings = {
@@ -82,10 +123,12 @@ class DataImportService:
     async def import_position_group(
         self, 
         position: str, 
-        season: int
+        season: int,
+        batch_size: int = 5,  # Process 5 players at a time
+        batch_delay: float = 3.0  # 3s delay between batches
     ) -> Tuple[int, List[str]]:
         """
-        Import all players for a specific position.
+        Import all players for a specific position with batch processing.
         Returns (success_count, error_messages)
         """
         if position not in self.positions:
@@ -97,45 +140,86 @@ class DataImportService:
         try:
             # Get the comprehensive list of players
             players = await self.build_position_player_list(position, season)
-            logger.info(f"Starting import for {len(players)} {position} players")
+            logger.info(f"Starting import for {len(players)} {position} players in batches of {batch_size}")
             
-            for idx, player in enumerate(players, 1):
-                player_name = player['name']
-                player_team = player['team']
+            # Process in batches
+            for batch_start in range(0, len(players), batch_size):
+                # Check if circuit breaker is open
+                if self.circuit_breaker.is_open():
+                    msg = "Circuit breaker triggered due to rate limiting. Pausing imports."
+                    logger.warning(msg)
+                    error_messages.append(msg)
+                    break
                 
-                logger.info(f"[{idx}/{len(players)}] Processing {player_name} ({player_team})")
+                batch_end = min(batch_start + batch_size, len(players))
+                batch = players[batch_start:batch_end]
+                logger.info(f"Processing batch {batch_start//batch_size + 1}/{(len(players)-1)//batch_size + 1} ({batch_start+1}-{batch_end}/{len(players)})")
                 
-                try:
-                    # Check if player already has data
+                batch_tasks = []
+                for player in batch:
+                    player_name = player['name']
+                    player_team = player['team']
+                    
+                    # Check if player already has data (don't create task if data exists)
                     exists = await self._player_data_exists(player_name, position, season)
                     if exists:
                         logger.info(f"Skipping {player_name} - already imported")
                         success_count += 1
                         continue
-                    
-                    # Import the player data
-                    await self._import_player_data(
+                        
+                    # Create task for player import
+                    task = self._process_player(
                         name=player_name,
                         position=position,
                         team=player_team,
                         season=season
                     )
-                    success_count += 1
-                    
-                except Exception as e:
-                    msg = f"Error importing {player_name}: {str(e)}"
-                    logger.error(msg)
-                    error_messages.append(msg)
+                    batch_tasks.append(task)
                 
-                # Rate limiting between player imports
-                if idx < len(players):
-                    await self._sleep_random()
-                        
+                # Execute batch tasks concurrently
+                if batch_tasks:
+                    batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+                    
+                    # Process results
+                    for idx, result in enumerate(batch_results):
+                        if isinstance(result, Exception):
+                            msg = f"Error importing player: {str(result)}"
+                            logger.error(msg)
+                            error_messages.append(msg)
+                        else:
+                            success_count += 1
+                
+                # Delay between batches (if not the last batch)
+                if batch_end < len(players):
+                    logger.info(f"Batch complete. Waiting {batch_delay}s before next batch.")
+                    await asyncio.sleep(batch_delay)
+                    
             return success_count, error_messages
                 
         except Exception as e:
             logger.error(f"Error importing {position} group: {str(e)}")
             return success_count, [*error_messages, str(e)]
+            
+    async def _process_player(
+        self,
+        name: str,
+        position: str,
+        team: str,
+        season: int
+    ) -> bool:
+        """Process a single player within a batch."""
+        logger.info(f"Processing {name} ({team})")
+        try:
+            await self._import_player_data(
+                name=name,
+                position=position,
+                team=team,
+                season=season
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error processing {name}: {str(e)}")
+            raise
 
     async def build_position_player_list(self, position: str, season: int) -> List[Dict]:
         """
@@ -182,9 +266,9 @@ class DataImportService:
         logger.info(f"Scraping {position} players from {url}")
         
         try:
-            # Make the request
-            response = requests.get(url)
-            response.raise_for_status()
+            # Make the request with rate limiting and backoff
+            async with self.request_semaphore:
+                response = await self._request_with_backoff(url)
             
             # Parse the HTML
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -274,12 +358,18 @@ class DataImportService:
                 self.db.add(player)
                 self.db.flush()
             
-            # Get game logs from PFR
-            game_log_df = player_game_log.get_player_game_log(
-                player=name,
-                position=position,
-                season=season
-            )
+            # Get game logs from PFR with concurrency control
+            async with self.request_semaphore:
+                # The game_log scraper is synchronous, so we use asyncio.to_thread
+                # to avoid blocking the event loop
+                game_log_df = await asyncio.to_thread(
+                    player_game_log.get_player_game_log,
+                    player=name,
+                    position=position,
+                    season=season
+                )
+                # Apply rate limiting after the request
+                await self._sleep_random()
             
             if game_log_df is None or game_log_df.empty:
                 logger.warning(f"No game log data found for {name}")
@@ -373,3 +463,44 @@ class DataImportService:
         """Sleep for a random duration to implement rate limiting."""
         delay = random.uniform(self.min_delay, self.max_delay)
         await asyncio.sleep(delay)
+        
+    async def _request_with_backoff(self, url: str, max_retries: int = 3) -> requests.Response:
+        """Make HTTP request with exponential backoff for rate limiting."""
+        # Check if circuit breaker is open
+        if self.circuit_breaker.is_open():
+            raise Exception("Circuit breaker is open. Too many failed requests recently.")
+            
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(url)
+                response.raise_for_status()
+                return response
+            except requests.exceptions.HTTPError as e:
+                if hasattr(e, 'response') and e.response.status_code == 429 and attempt < max_retries - 1:
+                    # Record rate limit event in circuit breaker
+                    self.circuit_breaker.record_failure()
+                    
+                    wait_time = (2 ** attempt) * self.min_delay
+                    logger.warning(f"Rate limited. Waiting {wait_time}s before retry. Attempt {attempt+1}/{max_retries}")
+                    await asyncio.sleep(wait_time)
+                else:
+                    if hasattr(e, 'response') and e.response.status_code == 429:
+                        # If we've exhausted retries and still getting rate limited, 
+                        # record as failure and potentially open circuit breaker
+                        self.circuit_breaker.record_failure()
+                    raise
+        
+    async def _request_with_backoff(self, url: str, max_retries: int = 3) -> requests.Response:
+        """Make HTTP request with exponential backoff for rate limiting."""
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(url)
+                response.raise_for_status()
+                return response
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 429 and attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) * self.min_delay
+                    logger.warning(f"Rate limited. Waiting {wait_time}s before retry")
+                    await asyncio.sleep(wait_time)
+                else:
+                    raise

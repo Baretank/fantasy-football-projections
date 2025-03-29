@@ -167,7 +167,10 @@ npm test
 
 ## 📝 Documentation
 
-- Backend API documentation: `http://localhost:8000/docs`
+- Backend API documentation: `http://localhost:8000/docs` and `docs/api_docs.md`
+- Developer setup guide: See `docs/developer_setup.md`
+- Projection methodology: See `docs/projection_methodology.md`
+- User guide for scenario creation: See `docs/user_guide.md`
 - Technical implementation details: See `docs/model.md`
 - Database schema and models: See `backend/database/models.py`
 - Project structure: See `docs/structure.md`

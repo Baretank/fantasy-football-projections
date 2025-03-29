@@ -28,15 +28,19 @@ logger = logging.getLogger(__name__)
 async def import_position(
     service: DataImportService,
     position: str,
-    season: int
+    season: int,
+    batch_size: int = 5,
+    batch_delay: float = 3.0
 ) -> tuple[int, list[str]]:
     """Import data for a specific position."""
     start_time = time.time()
-    logger.info(f"\nStarting {position} imports for {season} season...")
+    logger.info(f"\nStarting {position} imports for {season} season (batch size: {batch_size}, delay: {batch_delay}s)...")
     
     success_count, failed = await service.import_position_group(
         position=position,
-        season=season
+        season=season,
+        batch_size=batch_size,
+        batch_delay=batch_delay
     )
     
     duration = time.time() - start_time
@@ -115,12 +119,53 @@ async def main():
         action='store_true',
         help='Verify data consistency after import'
     )
+    parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=5,
+        help='Number of players to process in each batch (default: 5)'
+    )
+    parser.add_argument(
+        '--batch-delay',
+        type=float,
+        default=3.0,
+        help='Delay in seconds between batches (default: 3.0)'
+    )
+    parser.add_argument(
+        '--min-delay',
+        type=float,
+        default=0.8,
+        help='Minimum delay in seconds between individual requests (default: 0.8)'
+    )
+    parser.add_argument(
+        '--max-delay',
+        type=float,
+        default=1.2,
+        help='Maximum delay in seconds between individual requests (default: 1.2)'
+    )
+    parser.add_argument(
+        '--max-concurrent',
+        type=int,
+        default=3,
+        help='Maximum number of concurrent requests (default: 3)'
+    )
     
     args = parser.parse_args()
     
     # Initialize database session and service
     db = SessionLocal()
     service = DataImportService(db)
+    
+    # Configure rate limiting parameters
+    service.min_delay = args.min_delay
+    service.max_delay = args.max_delay
+    service.request_semaphore = asyncio.Semaphore(args.max_concurrent)
+    
+    logger.info(f"Rate limiting configuration:")
+    logger.info(f"- Batch size: {args.batch_size}")
+    logger.info(f"- Batch delay: {args.batch_delay}s")
+    logger.info(f"- Request delay range: {args.min_delay}s-{args.max_delay}s")
+    logger.info(f"- Max concurrent requests: {args.max_concurrent}")
     
     try:
         # Ensure data directory exists
@@ -139,7 +184,9 @@ async def main():
             success_count, failures = await import_position(
                 service=service,
                 position=position,
-                season=args.season
+                season=args.season,
+                batch_size=args.batch_size,
+                batch_delay=args.batch_delay
             )
             
             total_success += success_count
