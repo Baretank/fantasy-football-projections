@@ -564,3 +564,234 @@ class TestProjectionPipeline:
         
         # Passing attempts should roughly equal targets (with small margin for error)
         assert abs(total_pass_attempts - total_targets) < 10
+        
+    @pytest.mark.asyncio
+    @pytest.fixture(scope="function")
+    async def import_test_data(self, test_db):
+        """Create mock data import service and test player."""
+        from unittest.mock import patch, MagicMock
+        from backend.services.data_import_service import DataImportService
+        
+        # Create a test player
+        player = Player(
+            player_id=str(uuid.uuid4()),
+            name="Test Import Player",
+            team="SF",
+            position="RB"
+        )
+        test_db.add(player)
+        test_db.commit()
+        
+        # Create mock service with mocked external data fetching
+        service = DataImportService(test_db)
+        
+        # Mock response data for fetch methods
+        mock_game_log = pd.DataFrame({
+            "Date": ["2023-09-10", "2023-09-17", "2023-09-24"],
+            "Week": [1, 2, 3],
+            "Tm": ["SF", "SF", "SF"],
+            "Opp": ["PIT", "LAR", "NYG"],
+            "Result": ["W 30-7", "W 27-20", "W 30-12"],
+            "Att": [22, 20, 18],
+            "Yds": [152, 116, 85],
+            "Y/A": [6.9, 5.8, 4.7],
+            "TD": [1, 1, 0],
+            "Tgt": [7, 6, 8],
+            "Rec": [5, 5, 7],
+            "Yds.1": [17, 21, 34],
+            "Y/R": [3.4, 4.2, 4.9],
+            "TD.1": [0, 0, 1],
+        })
+        
+        mock_season_totals = pd.DataFrame({
+            "Rk": [1],
+            "Player": ["Test Import Player"],
+            "Tm": ["SF"],
+            "Age": [27],
+            "Pos": ["RB"],
+            "G": [16],
+            "GS": [16],
+            "Att": [272],
+            "Yds": [1459],
+            "Y/A": [5.4],
+            "TD": [14],
+            "Tgt": [83],
+            "Rec": [67],
+            "Yds.1": [564],
+            "Y/R": [8.4],
+            "TD.1": [7],
+            "Ctch%": [80.7],
+            "Y/Tgt": [6.8],
+        })
+        
+        # Patch the service's fetch methods
+        with patch.object(service, '_fetch_game_log_data', return_value=mock_game_log), \
+             patch.object(service, '_fetch_season_totals', return_value=mock_season_totals):
+             
+            yield {
+                "service": service,
+                "player": player,
+                "mock_game_log": mock_game_log,
+                "mock_season_totals": mock_season_totals
+            }
+    
+    @pytest.mark.asyncio
+    async def test_import_to_projection_pipeline(
+        self, 
+        import_test_data, 
+        projection_service, 
+        validation_service, 
+        team_stats_2024
+    ):
+        """Test the complete import-to-projection pipeline."""
+        data_import_service = import_test_data["service"]
+        player = import_test_data["player"]
+        
+        # Step 1: Import player data
+        success = await data_import_service._import_player_data(player.player_id, 2023)
+        assert success is True
+        
+        # Step 2: Validate imported data
+        issues = validation_service.validate_player_data(player, 2023)
+        for issue in issues:
+            print(f"Validation issue: {issue}")
+        # Some issues may be expected due to the mock data
+        
+        # Step 3: Create base projection from imported data
+        projection = await projection_service.create_base_projection(player.player_id, 2024)
+        assert projection is not None
+        
+        # Verify projection was generated based on imported data
+        base_stats = data_import_service.db.query(BaseStat).filter(
+            BaseStat.player_id == player.player_id,
+            BaseStat.season == 2023,
+            BaseStat.week.is_(None)  # Season totals
+        ).first()
+        assert base_stats is not None
+        
+        # Projection should be related to historical data
+        # RB rush attempts should be similar to historical
+        if base_stats.carries:
+            assert projection.carries > 0
+            # Allow for reasonable range around historical value
+            assert 0.7 * base_stats.carries <= projection.carries <= 1.3 * base_stats.carries
+        
+        # Step 4: Apply adjustments
+        adjustments = {
+            'rush_volume': 1.1,  # 10% more rushing
+            'rec_volume': 0.9,   # 10% less receiving
+            'td_rate': 1.05      # 5% more TDs
+        }
+        
+        updated_projection = await projection_service.update_projection(
+            projection_id=projection.projection_id,
+            adjustments=adjustments
+        )
+        
+        # Verify adjustments were applied
+        assert updated_projection.carries > projection.carries
+        assert updated_projection.targets < projection.targets
+        
+        # Fantasy points should be calculated
+        assert updated_projection.half_ppr > 0
+        
+        # Calculate expected points and verify they match (within reasonable margin)
+        expected_points = (
+            updated_projection.rush_yards * 0.1 +   # 1 pt per 10 rush yards
+            updated_projection.rush_td * 6 +        # 6 pts per rush TD
+            updated_projection.rec_yards * 0.1 +    # 1 pt per 10 rec yards
+            updated_projection.receptions * 0.5 +   # 0.5 pt per reception (half PPR)
+            updated_projection.rec_td * 6           # 6 pts per rec TD
+        )
+        
+        assert updated_projection.half_ppr == pytest.approx(expected_points, rel=0.01)
+        
+        # Verify position-specific stats are reasonable
+        assert updated_projection.carries > 200  # RB1 should have significant carries
+        assert updated_projection.rush_yards > 900
+        assert updated_projection.targets > 0
+        assert updated_projection.receptions > 0
+    
+    @pytest.mark.asyncio
+    async def test_batch_import_and_projection(
+        self,
+        setup_test_data,
+        projection_service,
+        test_db
+    ):
+        """Test batch import followed by projection creation for multiple players."""
+        from unittest.mock import patch, MagicMock
+        from backend.services.batch_service import BatchService
+        from backend.services.data_import_service import DataImportService
+        
+        # Get a subset of players to test batch processing
+        players = setup_test_data["players"][:5]  # First 5 players
+        player_ids = [p.player_id for p in players]
+        
+        # Create batch service
+        batch_service = BatchService(test_db)
+        
+        # Create data import service with mocked import method
+        data_service = DataImportService(test_db)
+        
+        # Mock successful import for all players
+        successful_imports = {}
+        for player_id in player_ids:
+            successful_imports[player_id] = True
+        
+        # Mock the batch import process
+        with patch.object(batch_service, 'process_batch', return_value=successful_imports):
+            # Step 1: Batch import players
+            results = await batch_service.process_batch(
+                service=data_service,
+                method_name="_import_player_data",
+                items=player_ids,
+                season=2023,
+                batch_size=2,
+                delay=0.1
+            )
+            
+            # Verify all imports were successful
+            assert all(results.values())
+            assert len(results) == len(player_ids)
+            
+            # Step 2: Batch create projections
+            projections = []
+            for player_id in player_ids:
+                # Create base projection
+                proj = await projection_service.create_base_projection(player_id, 2024)
+                assert proj is not None
+                projections.append(proj)
+            
+            # Apply the same adjustment to all projections
+            common_adjustments = {
+                'td_rate': 1.05  # 5% more TDs for everyone
+            }
+            
+            updated_projections = []
+            for proj in projections:
+                updated_proj = await projection_service.update_projection(
+                    projection_id=proj.projection_id,
+                    adjustments=common_adjustments
+                )
+                updated_projections.append(updated_proj)
+            
+            # Verify results
+            assert len(updated_projections) == len(player_ids)
+            
+            # Each player should have increased TDs relative to base
+            for i, proj in enumerate(updated_projections):
+                base_proj = projections[i]
+                
+                # Stats that should increase
+                if hasattr(base_proj, 'pass_td') and base_proj.pass_td:
+                    assert proj.pass_td > base_proj.pass_td
+                
+                if hasattr(base_proj, 'rush_td') and base_proj.rush_td:
+                    assert proj.rush_td > base_proj.rush_td
+                
+                if hasattr(base_proj, 'rec_td') and base_proj.rec_td:
+                    assert proj.rec_td > base_proj.rec_td
+                
+                # Fantasy points should increase
+                assert proj.half_ppr > base_proj.half_ppr

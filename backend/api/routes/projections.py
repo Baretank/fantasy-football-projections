@@ -302,3 +302,30 @@ async def get_team_stats(
         )
         
     return stats[0]
+    
+@router.post("/rookies/draft-based", response_model=ProjectionResponse)
+async def create_draft_based_rookie_projection(
+    player_id: str = Query(..., description="Rookie player ID"),
+    draft_position: int = Query(..., gt=0, le=262, description="Overall draft position"),
+    season: int = Query(..., ge=2025, description="Projection season"),
+    scenario_id: Optional[str] = Query(None, description="Optional scenario ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a rookie projection based on draft position.
+    """
+    service = RookieProjectionService(db)
+    projection = await service.create_draft_based_projection(
+        player_id=player_id,
+        draft_position=draft_position,
+        season=season,
+        scenario_id=scenario_id
+    )
+    
+    if not projection:
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to create rookie projection"
+        )
+        
+    return projection

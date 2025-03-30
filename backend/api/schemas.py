@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, validator
 from typing import Dict, List, Optional, Union, Any
-from datetime import datetime
+from datetime import datetime, date
 
 class PlayerBase(BaseModel):
     """Base player information model."""
@@ -11,6 +11,20 @@ class PlayerBase(BaseModel):
 class PlayerResponse(PlayerBase):
     """Player response model with additional metadata."""
     player_id: str = Field(..., description="Unique player identifier")
+    
+    # Enhanced player details
+    date_of_birth: Optional[date] = Field(None, description="Player date of birth (YYYY-MM-DD)")
+    height: Optional[int] = Field(None, description="Player height in inches")
+    weight: Optional[int] = Field(None, description="Player weight in pounds")
+    status: Optional[str] = Field("Active", description="Player status (Active, Injured, Rookie)")
+    depth_chart_position: Optional[str] = Field("Backup", description="Depth chart position (Starter, Backup, Reserve)")
+    
+    # Draft information
+    draft_position: Optional[int] = Field(None, description="Overall draft position")
+    draft_team: Optional[str] = Field(None, description="Team that drafted player")
+    draft_round: Optional[int] = Field(None, description="Draft round")
+    draft_pick: Optional[int] = Field(None, description="Pick within round")
+    
     created_at: datetime = Field(..., description="Record creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
@@ -359,3 +373,58 @@ class PlayerSearchResponse(BaseModel):
     query: str
     count: int
     players: List[Dict[str, Any]]
+    
+class RookieProjectionTemplateResponse(BaseModel):
+    """Rookie projection template model."""
+    template_id: str = Field(..., description="Unique template identifier")
+    position: str = Field(..., description="Player position (QB, RB, WR, TE)")
+    draft_round: int = Field(..., description="Draft round (1-7)")
+    draft_pick_min: int = Field(..., description="Minimum draft pick")
+    draft_pick_max: int = Field(..., description="Maximum draft pick")
+    games: float = Field(..., description="Projected games")
+    snap_share: float = Field(..., description="Projected snap share")
+    
+    # Position-specific metrics
+    pass_attempts: Optional[float] = Field(None, description="Pass attempts")
+    comp_pct: Optional[float] = Field(None, description="Completion percentage")
+    yards_per_att: Optional[float] = Field(None, description="Yards per attempt")
+    pass_td_rate: Optional[float] = Field(None, description="Pass TD rate")
+    int_rate: Optional[float] = Field(None, description="Interception rate")
+    rush_att_per_game: Optional[float] = Field(None, description="Rush attempts per game")
+    rush_yards_per_att: Optional[float] = Field(None, description="Yards per rush attempt")
+    rush_td_per_game: Optional[float] = Field(None, description="Rush TDs per game")
+    targets_per_game: Optional[float] = Field(None, description="Targets per game")
+    catch_rate: Optional[float] = Field(None, description="Catch rate")
+    rec_yards_per_catch: Optional[float] = Field(None, description="Receiving yards per catch")
+    rec_td_per_catch: Optional[float] = Field(None, description="Receiving TDs per catch")
+    rush_td_per_att: Optional[float] = Field(None, description="Rush TDs per attempt")
+    
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+        
+class RookieProjectionTemplateRequest(BaseModel):
+    """Request to create or update a rookie projection template."""
+    position: str = Field(..., description="Player position (QB, RB, WR, TE)")
+    draft_round: int = Field(..., description="Draft round (1-7)")
+    draft_pick_min: int = Field(..., description="Minimum draft pick")
+    draft_pick_max: int = Field(..., description="Maximum draft pick")
+    games: float = Field(..., description="Projected games")
+    snap_share: float = Field(..., description="Projected snap share")
+    
+    # Position-specific metrics (only relevant ones are required)
+    pass_attempts: Optional[float] = None
+    comp_pct: Optional[float] = None
+    yards_per_att: Optional[float] = None
+    pass_td_rate: Optional[float] = None
+    int_rate: Optional[float] = None
+    rush_att_per_game: Optional[float] = None
+    rush_yards_per_att: Optional[float] = None
+    rush_td_per_game: Optional[float] = None
+    targets_per_game: Optional[float] = None
+    catch_rate: Optional[float] = None
+    rec_yards_per_catch: Optional[float] = None
+    rec_td_per_catch: Optional[float] = None
+    rush_td_per_att: Optional[float] = None

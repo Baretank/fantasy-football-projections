@@ -8,7 +8,8 @@ import {
   DocumentDuplicateIcon,
   BuildingLibraryIcon,
   ArrowPathIcon,
-  Cog6ToothIcon
+  Cog6ToothIcon,
+  TrophyIcon
 } from '@heroicons/react/24/outline';
 
 interface NavItem {
@@ -42,6 +43,12 @@ const navigation: NavItem[] = [
     href: '/teams',
     icon: <BuildingLibraryIcon className="h-5 w-5" />,
     description: 'Team-level adjustments'
+  },
+  {
+    name: 'Draft Tool',
+    href: '/draft',
+    icon: <TrophyIcon className="h-5 w-5" />,
+    description: 'NFL Draft Day operations'
   },
   {
     name: 'Compare',

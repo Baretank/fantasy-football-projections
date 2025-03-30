@@ -13,6 +13,7 @@ import NotFoundPage from '@/pages/NotFoundPage';
 import ProjectionAdjuster from '@/components/projectionadjuster';
 import ScenarioManager from '@/components/scenariomanager';
 import TeamAdjuster from '@/components/teamadjuster';
+import DraftDayTool from '@/components/draftdaytool';
 
 // Define routes
 const router = createBrowserRouter([
@@ -46,6 +47,10 @@ const router = createBrowserRouter([
           <h1 className="text-3xl font-bold mb-4">Settings</h1>
           <p>This page is under construction.</p>
         </div>
+      },
+      {
+        path: 'draft',
+        element: <DraftDayTool />
       },
       {
         path: '*',

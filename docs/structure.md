@@ -123,7 +123,6 @@ fantasy-football-projections/
 ├── docs/
 │   ├── structure.md          # This document
 │   ├── model.md              # Projection model docs
-│   ├── Data Import Plan.md   # Data import details
 │   └── PFR Docs.md           # Pro Football Reference details
 │
 └── data/

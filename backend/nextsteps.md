@@ -38,7 +38,69 @@
 - [x] Document projection methodology and algorithms
 - [x] Create user guide for scenario creation
 
-## Deployment
+## Phase 2 
+
+- [x] Combined Player Details CSV Upload 
+  - [x] Add enhanced player details
+  - [x] Update existing Player model with additional fields
+  - [x] Create new import service and API endpoint
+  
+- [x] Starter/Backup and Status Tags
+  - [ ] Implement UI components for managing tags
+  - [x] Add API endpoints for status and depth chart management
+  - [x] Support batch updates for multiple players
+  
+- [x] Rookie Projections Based on Draft Position
+  - [x] Create RookieProjectionTemplate table
+  - [x] Enhance RookieProjectionService to use draft position templates
+  - [x] Add API endpoint for draft-based rookie projections
+  
+- [x] Simple Draft Day Tool
+  - [x] Add draft status fields to Player model
+  - [x] Create frontend component for draft day operations
+  - [x] Implement API endpoints for the draft tool
+  - [x] Add batch operations for rookie updates
+  - [x] Support automatic projection creation after draft
+
+## Phase 3 [Expanded Testing](expandedtesting.md)
+
+### Essential Unit Testing
+- [x] Test ProjectionService adjustment factors and projection creation/updates
+- [x] Test OverrideService manual overrides and dependent stat recalculation
+- [x] Test TeamStatService team-level adjustments
+- [x] Test ScenarioService scenario creation and cloning
+
+### Data Import Testing
+- [x] Test player list retrieval from external sources
+- [x] Test parsing of statistical data
+- [x] Test data transformations
+- [x] Test rate limiting and backoff mechanisms
+- [x] Create mock responses for external data sources
+- [x] Test handling of various response formats
+- [x] Test error handling for network issues
+
+### Integration Testing
+- [x] Test Import-to-Projection Pipeline
+- [x] Test batch processing functionality
+- [x] Test circuit breaker pattern for rate limiting
+- [x] Test request concurrency management
+
+### Position-Specific Import Testing
+- [x] Test QB stats import accuracy (passing metrics)
+- [x] Test RB stats import accuracy (rushing and receiving)
+- [x] Test WR/TE stats import accuracy (receiving metrics)
+
+### Import Data Transformation
+- [x] Test conversion from external format to internal models
+- [x] Test stat mapping for different positions
+- [x] Test calculation of derived metrics
+
+### Batch Import Behavior
+- [x] Test importing a full position group
+- [x] Test batch size and delay parameters
+- [x] Test interruption and recovery during batch import
+
+### Deployment
 - [ ] Set up proper environment configuration
 - [ ] Implement database migration strategy
 - [ ] Configure production deployment pipeline

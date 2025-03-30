@@ -10,6 +10,7 @@ import {
   BellIcon 
 } from '@heroicons/react/24/outline';
 import { Input } from '@/components/ui/input';
+import { Toaster } from '@/components/ui/toaster';
 
 const AppLayout: React.FC = () => {
   const location = useLocation();
@@ -76,6 +77,9 @@ const AppLayout: React.FC = () => {
           <p>Fantasy Football Projections © 2025 | Enhanced Statistical Model</p>
         </footer>
       </div>
+      
+      {/* Toast notifications */}
+      <Toaster />
     </div>
   );
 };

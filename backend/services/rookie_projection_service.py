@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from datetime import datetime
 
-from backend.database.models import Player, Projection, TeamStat, Scenario
+from backend.database.models import Player, Projection, TeamStat, Scenario, RookieProjectionTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -504,6 +504,153 @@ class RookieProjectionService:
                 projection.yards_per_reception = model['rec_yards_per_catch']
         
         return projection
+        
+    async def create_draft_based_projection(
+        self,
+        player_id: str,
+        draft_position: int,
+        season: int,
+        scenario_id: Optional[str] = None
+    ) -> Optional[Projection]:
+        """
+        Create a rookie projection based on draft position.
+        
+        Args:
+            player_id: The rookie player's ID
+            draft_position: Overall draft position (1-262)
+            season: The projection season
+            scenario_id: Optional scenario ID
+            
+        Returns:
+            Created projection or None if failed
+        """
+        try:
+            # Get the player
+            player = self.db.query(Player).get(player_id)
+            if not player:
+                logger.error(f"Player {player_id} not found")
+                return None
+            
+            # Set status to Rookie
+            player.status = "Rookie"
+            player.draft_position = draft_position
+            
+            # Find appropriate template based on position and draft position
+            template = self.db.query(RookieProjectionTemplate).filter(
+                RookieProjectionTemplate.position == player.position,
+                RookieProjectionTemplate.draft_pick_min <= draft_position,
+                RookieProjectionTemplate.draft_pick_max >= draft_position
+            ).first()
+            
+            if not template:
+                logger.warning(f"No template found for {player.position} at pick {draft_position}")
+                # Fall back to most generic template for this position
+                template = self.db.query(RookieProjectionTemplate).filter(
+                    RookieProjectionTemplate.position == player.position
+                ).order_by(RookieProjectionTemplate.draft_pick_max.desc()).first()
+                
+                if not template:
+                    logger.error(f"No fallback template found for {player.position}")
+                    # Use the comp model if no template found
+                    comp_level = "low"
+                    if draft_position <= 32:
+                        comp_level = "high"
+                    elif draft_position <= 100:
+                        comp_level = "medium"
+                    
+                    # Create a basic projection
+                    projection = Projection(
+                        projection_id=str(uuid.uuid4()),
+                        player_id=player_id,
+                        scenario_id=scenario_id,
+                        season=season,
+                        games=17.0
+                    )
+                    
+                    # Use the standard comp model
+                    self.db.add(projection)
+                    enhanced_proj = await self._enhance_with_comp_model(
+                        projection, player, comp_level, 0.6
+                    )
+                    
+                    if enhanced_proj:
+                        enhanced_proj.half_ppr = enhanced_proj.calculate_fantasy_points()
+                        self.db.commit()
+                        return enhanced_proj
+                    return None
+            
+            # Create projection based on template
+            projection = Projection(
+                projection_id=str(uuid.uuid4()),
+                player_id=player_id,
+                scenario_id=scenario_id,
+                season=season,
+                games=template.games
+            )
+            
+            # Set position-specific metrics from template
+            if player.position == "QB":
+                projection.pass_attempts = template.pass_attempts * template.games
+                projection.completions = projection.pass_attempts * template.comp_pct
+                projection.pass_yards = projection.pass_attempts * template.yards_per_att
+                projection.pass_td = projection.pass_attempts * template.pass_td_rate
+                projection.interceptions = projection.pass_attempts * template.int_rate
+                projection.carries = template.rush_att_per_game * template.games
+                projection.rush_yards = projection.carries * template.rush_yards_per_att
+                projection.rush_td = template.rush_td_per_game * template.games
+                
+                # Set efficiency metrics
+                projection.comp_pct = template.comp_pct
+                projection.yards_per_att = template.yards_per_att
+                projection.pass_td_rate = template.pass_td_rate
+                projection.int_rate = template.int_rate
+                projection.yards_per_carry = template.rush_yards_per_att
+                
+            elif player.position == "RB":
+                projection.carries = template.rush_att_per_game * template.games
+                projection.rush_yards = projection.carries * template.rush_yards_per_att
+                projection.rush_td = projection.carries * template.rush_td_per_att
+                projection.targets = template.targets_per_game * template.games
+                projection.receptions = projection.targets * template.catch_rate
+                projection.rec_yards = projection.receptions * template.rec_yards_per_catch
+                projection.rec_td = projection.receptions * template.rec_td_per_catch
+                
+                # Set efficiency metrics
+                projection.catch_pct = template.catch_rate
+                projection.yards_per_carry = template.rush_yards_per_att
+                projection.yards_per_target = template.rec_yards_per_catch * template.catch_rate
+                
+            elif player.position in ["WR", "TE"]:
+                projection.targets = template.targets_per_game * template.games
+                projection.receptions = projection.targets * template.catch_rate
+                projection.rec_yards = projection.receptions * template.rec_yards_per_catch
+                projection.rec_td = projection.receptions * template.rec_td_per_catch
+                projection.carries = template.rush_att_per_game * template.games
+                projection.rush_yards = projection.carries * template.rush_yards_per_att
+                projection.rush_td = projection.carries * template.rush_td_per_att
+                
+                # Set efficiency metrics
+                projection.catch_pct = template.catch_rate
+                projection.yards_per_target = template.rec_yards_per_catch * template.catch_rate
+                if projection.receptions > 0:
+                    projection.yards_per_reception = template.rec_yards_per_catch
+            
+            # Set usage metrics
+            projection.snap_share = template.snap_share
+            
+            # Calculate fantasy points
+            projection.half_ppr = projection.calculate_fantasy_points()
+            
+            # Save to database
+            self.db.add(projection)
+            self.db.commit()
+            
+            return projection
+            
+        except Exception as e:
+            logger.error(f"Error creating draft-based projection: {str(e)}")
+            self.db.rollback()
+            return None
     
     async def _enhance_with_team_context(
         self,

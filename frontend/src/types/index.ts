@@ -10,6 +10,19 @@ export interface Player extends BaseEntity {
   name: string;
   team: string;
   position: string;
+  
+  // Enhanced player details
+  date_of_birth?: string;  // ISO date string format YYYY-MM-DD
+  height?: number;         // Height in inches
+  weight?: number;
+  status?: string;
+  depth_chart_position?: string;
+  
+  // Draft information
+  draft_position?: number;
+  draft_team?: string;
+  draft_round?: number;
+  draft_pick?: number;
 }
 
 // Projection types

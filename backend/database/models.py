@@ -1,6 +1,6 @@
-from sqlalchemy import Column, Integer, Float, String, ForeignKey, DateTime, JSON, Boolean
+from sqlalchemy import Column, Integer, Float, String, ForeignKey, DateTime, JSON, Boolean, Date
 from sqlalchemy.orm import relationship, mapped_column, Mapped
-from datetime import datetime
+from datetime import datetime, date
 from typing import Dict, Optional
 from .database import Base
 import uuid
@@ -60,6 +60,20 @@ class Player(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     team: Mapped[str] = mapped_column(String, nullable=False)
     position: Mapped[str] = mapped_column(String, nullable=False)
+    
+    # New fields for enhanced player details
+    date_of_birth: Mapped[Optional[date]] = mapped_column(Date, nullable=True)  # Format: YYYY-MM-DD
+    height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Height in inches
+    weight: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # In pounds
+    status: Mapped[str] = mapped_column(String, default="Active")  # Active, Injured, Rookie
+    depth_chart_position: Mapped[str] = mapped_column(String, default="Backup")  # Starter, Backup, Reserve
+    
+    # Draft information fields
+    draft_position: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Overall draft position
+    draft_team: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # Team that drafted player
+    draft_round: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Draft round
+    draft_pick: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Pick within round
+    
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -315,3 +329,38 @@ class StatOverride(Base):
     # Relationships
     player = relationship("Player", back_populates="stat_overrides")
     projection = relationship("Projection", back_populates="stat_overrides")
+
+class RookieProjectionTemplate(Base):
+    """Templates for rookie projections based on position and draft position"""
+    __tablename__ = "rookie_projection_templates"
+
+    template_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    position: Mapped[str] = mapped_column(String, nullable=False)  # QB, RB, WR, TE
+    draft_round: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-7
+    draft_pick_min: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-262
+    draft_pick_max: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-262
+    
+    # Playing time
+    games: Mapped[float] = mapped_column(Float, default=17.0)
+    snap_share: Mapped[float] = mapped_column(Float)  # Percentage of team snaps
+    
+    # Position-specific metrics
+    # QB metrics
+    pass_attempts: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    comp_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    yards_per_att: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    pass_td_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    int_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    rush_att_per_game: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    rush_yards_per_att: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    rush_td_per_game: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    
+    # RB metrics
+    targets_per_game: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    catch_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    rec_yards_per_catch: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    rec_td_per_catch: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    rush_td_per_att: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -1,13 +1,14 @@
 import sys
 from pathlib import Path
 import json
+import os
 
 # Add the project root to Python path
 project_root = str(Path(__file__).parent.parent.parent)
 sys.path.insert(0, project_root)
 
-from backend.database.database import engine, Base
-from backend.database.models import Player, BaseStat, Projection, TeamStat
+from backend.database.database import engine, Base, SessionLocal
+from backend.database.models import Player, BaseStat, Projection, TeamStat, RookieProjectionTemplate
 
 def init_db():
     """Initialize database and required data files."""
@@ -28,6 +29,18 @@ def init_db():
     
     # Create database tables
     Base.metadata.create_all(bind=engine)
+    
+    # Initialize rookie templates
+    print("Initializing rookie templates...")
+    script_path = Path(__file__).parent.parent / "scripts" / "initialize_rookie_templates.py"
+    if script_path.exists():
+        # Execute the script to initialize rookie templates
+        # We import the function directly to avoid subprocess complexities
+        sys.path.insert(0, str(script_path.parent))
+        from initialize_rookie_templates import initialize_rookie_templates
+        initialize_rookie_templates()
+    else:
+        print(f"Warning: Rookie template initialization script not found at {script_path}")
     
     print("Database initialized successfully.")
     print(f"Data directory: {data_dir}")
