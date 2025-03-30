@@ -35,7 +35,7 @@
 ## Documentation
 - [x] Complete API documentation
 - [x] Add developer setup guide
-- [x] Document projection methodology and algorithms
+- [x] Document projection model and algorithms
 - [x] Create user guide for scenario creation
 
 ## Phase 2 

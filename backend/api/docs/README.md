@@ -249,6 +249,124 @@ curl -X POST "http://localhost:8000/api/batch/export" \
   -d '{"player_ids":["123e4567-e89b-12d3-a456-426614174000","456e7890-f12d-34e5-b678-426614174000"],"scenario_id":"789e0123-f45d-67e8-b901-426614174000","format":"csv"}'
 ```
 
+### Rookies
+
+#### POST /rookies/from-draft
+Create rookie projections based on draft position.
+
+Request Body:
+```json
+{
+  "name": "Trevor Lawrence",
+  "team": "JAX",
+  "position": "QB",
+  "draft_position": 1,
+  "draft_round": 1,
+  "college": "Clemson",
+  "height": 78,
+  "weight": 220,
+  "season": 2024
+}
+```
+
+Example Request:
+```bash
+curl -X POST "http://localhost:8000/api/rookies/from-draft" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Trevor Lawrence","team":"JAX","position":"QB","draft_position":1,"draft_round":1,"college":"Clemson","height":78,"weight":220,"season":2024}'
+```
+
+#### GET /rookies/templates
+Retrieve rookie projection templates.
+
+Query Parameters:
+- `position` (optional): Filter by position
+
+Example Request:
+```bash
+curl -X GET "http://localhost:8000/api/rookies/templates?position=WR"
+```
+
+## New Features (v0.3.0)
+
+### Projection Variance
+
+#### GET /projections/variance/{projection_id}
+Retrieve variance data for a specific projection.
+
+Query Parameters:
+- `confidence_level` (optional): Confidence interval level (50, 80, 90, 95)
+
+Example Request:
+```bash
+curl -X GET "http://localhost:8000/api/projections/variance/456e7890-f12d-34e5-b678-426614174000?confidence_level=80"
+```
+
+### Team Statistics
+
+#### GET /teams/stats
+Retrieve team-level offensive statistics.
+
+Query Parameters:
+- `team` (optional): Filter by team abbreviation
+- `season` (optional): Filter by season
+
+Example Request:
+```bash
+curl -X GET "http://localhost:8000/api/teams/stats?team=KC&season=2024"
+```
+
+#### PUT /teams/stats/{team_stat_id}
+Update team-level offensive statistics.
+
+Request Body:
+```json
+{
+  "adjustments": {
+    "plays_per_game": 68,
+    "pass_percentage": 0.62,
+    "yards_per_attempt": 7.8
+  }
+}
+```
+
+Example Request:
+```bash
+curl -X PUT "http://localhost:8000/api/teams/stats/456e7890-f12d-34e5-b678-426614174000" \
+  -H "Content-Type: application/json" \
+  -d '{"adjustments":{"plays_per_game":68,"pass_percentage":0.62,"yards_per_attempt":7.8}}'
+```
+
+## Current Status and Progress
+
+The Fantasy Football Projections API has been significantly enhanced through several development cycles. Current implementation status:
+
+### Completed Features
+- ✅ Core CRUD operations for players, projections, and statistics
+- ✅ Advanced projection engine with efficiency metrics
+- ✅ Statistical variance and confidence intervals
+- ✅ Scenario planning system
+- ✅ Manual override tracking
+- ✅ Batch operations
+- ✅ Data export capabilities
+- ✅ Rookie projection system with draft-based templates
+- ✅ Team-level constraint management
+- ✅ Response caching for improved performance
+- ✅ Enhanced error handling and validation
+
+### In Progress
+- 🔄 Starter/Backup and Status Tags UI components
+- 🔄 OAuth-based authentication system
+- 🔄 Enhanced audit logging
+- 🔄 Automated test suite for API endpoints
+
+### Future Roadmap
+- ⏳ Real-time notification system using WebSockets
+- ⏳ Webhook support for external integrations
+- ⏳ Advanced rate limiting
+- ⏳ User role-based permissions
+- ⏳ Data visualization endpoints
+
 ## Status Codes
 
 - 200: Success
@@ -258,177 +376,6 @@ curl -X POST "http://localhost:8000/api/batch/export" \
 - 404: Not Found
 - 422: Unprocessable Entity
 - 500: Internal Server Error
-
-## Rate Limiting
-
-Currently, there are no rate limits implemented. This will be added in future versions.
-
-## Data Models
-
-### Player
-```typescript
-{
-  player_id: string;
-  name: string;
-  team: string;
-  position: string;
-  status: string;
-  rookie: boolean;
-  created_at: string;
-  updated_at: string;
-}
-```
-
-### Projection
-```typescript
-{
-  projection_id: string;
-  player_id: string;
-  scenario_id?: string;
-  season: number;
-  games: number;
-  half_ppr: number;
-  
-  // Enhanced passing stats
-  pass_attempts?: number;
-  completions?: number;
-  gross_pass_yards?: number;
-  sacks?: number;
-  sack_yards?: number;
-  net_pass_yards?: number;
-  pass_td?: number;
-  interceptions?: number;
-  
-  // Efficiency metrics
-  pass_att_pct?: number;
-  comp_pct?: number;
-  yards_per_att?: number;
-  net_yards_per_att?: number;
-  pass_td_rate?: number;
-  int_rate?: number;
-  sack_rate?: number;
-  
-  // Enhanced rushing stats
-  carries?: number;
-  gross_rush_yards?: number;
-  fumbles_lost?: number;
-  net_rush_yards?: number;
-  rush_td?: number;
-  
-  // Rushing efficiency metrics
-  car_pct?: number;
-  yards_per_carry?: number;
-  net_yards_per_carry?: number;
-  fumble_rate?: number;
-  rush_td_rate?: number;
-  
-  // Receiving stats
-  targets?: number;
-  receptions?: number;
-  rec_yards?: number;
-  rec_td?: number;
-  
-  // Receiving efficiency metrics
-  tar_pct?: number;
-  catch_pct?: number;
-  yards_per_target?: number;
-  rec_td_rate?: number;
-  
-  // Status flags
-  has_overrides: boolean;
-  is_fill_player: boolean;
-  
-  // Additional data
-  variance?: ProjectionVariance;
-  created_at: string;
-  updated_at: string;
-}
-```
-
-### ProjectionVariance
-```typescript
-{
-  projection_id: string;
-  variance_id: string;
-  
-  // Lower bounds (80% confidence interval)
-  lower_pass_attempts?: number;
-  lower_completions?: number;
-  lower_pass_yards?: number;
-  lower_pass_td?: number;
-  lower_interceptions?: number;
-  lower_carries?: number;
-  lower_rush_yards?: number;
-  lower_rush_td?: number;
-  lower_targets?: number;
-  lower_receptions?: number;
-  lower_rec_yards?: number;
-  lower_rec_td?: number;
-  lower_half_ppr?: number;
-  
-  // Upper bounds (80% confidence interval)
-  upper_pass_attempts?: number;
-  upper_completions?: number;
-  upper_pass_yards?: number;
-  upper_pass_td?: number;
-  upper_interceptions?: number;
-  upper_carries?: number;
-  upper_rush_yards?: number;
-  upper_rush_td?: number;
-  upper_targets?: number;
-  upper_receptions?: number;
-  upper_rec_yards?: number;
-  upper_rec_td?: number;
-  upper_half_ppr?: number;
-}
-```
-
-### StatOverride
-```typescript
-{
-  override_id: string;
-  player_id: string;
-  projection_id: string;
-  stat_name: string;
-  calculated_value: number;
-  manual_value: number;
-  notes?: string;
-  created_at: string;
-}
-```
-
-### PlayerStats
-```typescript
-{
-  player_id: string;
-  name: string;
-  team: string;
-  position: string;
-  stats: {
-    [season: number]: {
-      weeks?: {
-        [week: number]: {
-          [stat_type: string]: number;
-        };
-      };
-      [stat_type: string]: number;
-    };
-  };
-}
-```
-
-### Scenario
-```typescript
-{
-  scenario_id: string;
-  name: string;
-  description?: string;
-  is_baseline: boolean;
-  base_scenario_id?: string;
-  created_at: string;
-  updated_at: string;
-}
-```
 
 ## Error Handling
 
@@ -536,6 +483,8 @@ For API support:
 - Added scenario management endpoints
 - Added data export capabilities
 - Improved caching for performance optimization
+- Added team-level adjustment endpoints
+- Enhanced data validation
 
 ### Version 0.2.0
 - Enhanced data models with net yardage calculations
@@ -549,10 +498,3 @@ For API support:
 - Basic CRUD operations for players and projections
 - Statistical analysis endpoints
 - Basic scenario support
-
-### Planned Features
-- Authentication and authorization
-- Rate limiting
-- Webhooks for data updates
-- Advanced statistical analysis
-- Real-time updates

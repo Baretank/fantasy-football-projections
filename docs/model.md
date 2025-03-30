@@ -1,26 +1,24 @@
-# Fantasy Football Statistical Projection Model: Technical Implementation and Methodology
+# Fantasy Football Statistical Projection Model
 
-## Abstract
+## Overview
 
-This document details our statistical model for projecting fantasy football player performance. The model incorporates team-level offensive metrics, individual player efficiency patterns, and a sophisticated system for manual overrides to generate accurate fantasy point projections. By leveraging multi-year historical data, regression analysis, and allowing for scenario-based adjustments, the system provides a flexible framework for fantasy football analysis and decision-making that combines statistical rigor with expert judgment.
+This document provides a comprehensive explanation of the statistical methodology and implementation details of the Fantasy Football Projections system. The model incorporates team-level offensive metrics, individual player efficiency patterns, and a sophisticated system for manual overrides to generate accurate fantasy point projections.
 
-## 1. Introduction
+## Model Architecture
 
-Fantasy football projections require a balance of statistical analysis and contextual understanding. Our enhanced model formalizes these relationships through a structured approach that:
+The projection system is built on several foundational principles:
 
-1. Establishes team-level "constraint envelopes"
-2. Projects player performance within team constraints
-3. Allows for expert-driven manual overrides
-4. Maintains mathematical consistency across changes
-5. Supports multiple projection scenarios
+1. **Team-level constraint envelopes** - Overall offensive production boundaries
+2. **Historical player efficiency metrics** - Individual performance patterns
+3. **Statistical regression** - Prevention of unrealistic projections
+4. **Manual override system** - Expert adjustments with mathematical consistency
+5. **Scenario planning** - Alternative projection situations
+6. **Projection uncertainty** - Statistical variance and confidence intervals
+7. **Rookie projection system** - Specialized methodology for first-year players
 
-This approach preserves the mathematical integrity of projections while enabling analysts to apply their domain expertise through a flexible override system.
+## Data Structure
 
-## 2. Enhanced Data Structure
-
-### 2.1 Team-Level Statistics (Per Game)
-
-The model uses team-level offensive statistics as the foundation for all projections:
+### Team-Level Statistics (Per Game)
 
 **Core Volume Metrics**
 - **Plays**: Total offensive plays per game
@@ -63,9 +61,7 @@ The model uses team-level offensive statistics as the foundation for all project
 - **ToTD**: Total touchdowns per game (PaTD + RuTD)
 - **HPPR**: Team fantasy points in Half-PPR format
 
-### 2.2 Player Statistics (Season Totals)
-
-Player projections include standard and enhanced metrics:
+### Player Statistics (Season Totals)
 
 **Identity**
 - **Player**: Player name
@@ -101,7 +97,7 @@ Player projections include standard and enhanced metrics:
 - **HPPR**: Half-PPR fantasy points (season total)
 - **PG**: Fantasy points per game
 
-### 2.3 Player Efficiency Metrics
+### Player Efficiency Metrics
 
 - **Att%**: Percentage of team pass attempts
 - **Comp%**: Completion percentage
@@ -121,55 +117,9 @@ Player projections include standard and enhanced metrics:
 - **YPT**: Yards per target
 - **Rec TD%**: Touchdown percentage on targets
 
-### 2.4 Override System
+## Calculation Methodology
 
-The model includes a comprehensive override system to track manual adjustments:
-
-**StatOverride**
-- **override_id**: Unique identifier
-- **player_id**: Associated player
-- **projection_id**: Associated projection
-- **stat_name**: The specific stat being overridden (e.g., "pass_attempts")
-- **calculated_value**: Original model-generated value
-- **manual_value**: User-specified override value
-- **notes**: Optional commentary on override rationale
-- **created_at**: Timestamp
-
-**EfficiencyOverride**
-- **override_id**: Unique identifier
-- **player_id**: Associated player
-- **metric_name**: The efficiency metric being adjusted (e.g., "yards_per_carry")
-- **default_value**: Original calculated efficiency
-- **modifier**: Multiplier (1.0 = no change)
-- **final_value**: Result after applying modifier
-- **notes**: Reasoning for adjustment
-- **created_at**: Timestamp
-
-**ContextualAdjustment**
-- **adjustment_id**: Unique identifier
-- **adjustment_type**: Type of adjustment ("coaching", "injury", "schedule")
-- **player_id**: Affected player (optional)
-- **team**: Affected team (optional)
-- **position**: Affected position (optional)
-- **affected_stats**: JSON of stats and their modifiers
-- **description**: Explanation of adjustment
-- **severity**: Impact magnitude (0.0-1.0)
-- **created_at**: Timestamp
-
-### 2.5 Scenario System
-
-The model supports multiple projection scenarios:
-
-**ProjectionScenario**
-- **scenario_id**: Unique identifier
-- **name**: Scenario name
-- **description**: Scenario description
-- **is_baseline**: Whether this is the baseline scenario
-- **created_at**: Timestamp
-
-## 3. Calculation Methodology
-
-### 3.1 Team Projection Formulas
+### Team Projection Formulas
 
 1. **PaATT** = Plays × Pass%
 2. **Gross PaYD** = PaATT × Y/A (Gross)
@@ -187,7 +137,7 @@ The model supports multiple projection scenarios:
 14. **ToYD** = Net PaYD + Net RuYD
 15. **ToTD** = PaTD + RuTD
 
-### 3.2 Player Projection Formulas
+### Player Projection Formulas
 
 1. **PaATT** = (Team PaATT × 17) × Att%
 2. **Comp** = PaATT × Comp%
@@ -209,320 +159,116 @@ The model supports multiple projection scenarios:
 18. **HPPR** = (Net PaYD × 0.04) + (PaTD × 4) + (INT × -2) + (Fumbles Lost × -2) + (Net RuYD × 0.1) + (RuTD × 6) + (Rec × 0.5) + (ReYD × 0.1) + (ReTD × 6)
 19. **PG** = HPPR / Gm
 
-### 3.3 Adjustment Processing
+## Advanced Projection Components
 
-The model processes adjustments through a hierarchical system:
+### Statistical Regression System
 
-1. **Team-level adjustments**: Applied first, affecting all players on the team
-2. **Position group adjustments**: Applied second, affecting all players at a position
-3. **Individual player adjustments**: Applied last, affecting only the specific player
+To prevent unrealistic projections, especially for players with limited sample sizes or extreme performance metrics, the system applies statistical regression based on z-scores.
 
-Each adjustment maintains mathematical consistency by:
+**Regression Approach:**
+- Calculate mean and standard deviation for each metric by position
+- Calculate z-score for player's efficiency metric
+- Apply regression to mean based on z-score magnitude:
+  - |z| > 2.0: 50% regression to mean
+  - 1.5 < |z| < 2.0: 35% regression to mean
+  - 1.0 < |z| < 1.5: 20% regression to mean
+  - |z| < 1.0: 10% regression to mean
 
-- Preserving team total plays
-- Maintaining valid target/touch shares
-- Adjusting related metrics proportionally
-- Ensuring consistent touchdown distribution
-- Recalculating dependent values
+**Example Calculation:**
+```
+Position Average YPC: 4.3
+Position Std Dev: 0.5
+Player YPC: 5.2
+Z-score: (5.2 - 4.3) / 0.5 = 1.8
+Regression Factor: 35%
+Regressed YPC: 4.3 + (5.2 - 4.3) × (1 - 0.35) = 4.89
+```
 
-### 3.4 Multi-Year Regression System
+### Manual Override System
 
-The model includes a regression system to prevent unrealistic projections:
+The system includes a comprehensive override tracking system that allows analysts to modify projections while maintaining mathematical consistency.
 
-1. Calculate z-scores for team and player efficiency metrics
-2. Apply regression based on z-score magnitude:
-   - |z| > 2.0: 50% regression to mean
-   - 1.5 < |z| < 2.0: 35% regression to mean
-   - 1.0 < |z| < 1.5: 20% regression to mean
-   - |z| < 1.0: 10% regression to mean
-3. Apply position-specific regression rates
-4. Account for player age and consistency
+**Types of Overrides:**
+- **Direct Stat Overrides**: Change specific statistical values directly
+- **Efficiency Overrides**: Modify efficiency metrics with percentage adjustments
+- **Contextual Adjustments**: Apply modifications based on specific contexts (injuries, coaching changes, etc.)
 
-### 3.5 Fill Player System
+**Mathematical Consistency:**
+When an override is applied, dependent statistics are automatically recalculated. For example:
+- If pass attempts are manually increased, completions and passing yards are adjusted accordingly
+- If target share is adjusted, receptions and receiving yards are updated
+- Team total constraints are preserved through fill player adjustments
 
-The model includes automatic reconciliation players:
+### Projection Scenarios
 
+The system supports multiple projection scenarios to model different potential outcomes.
+
+**Scenario Management:**
+- Baseline scenario represents the most likely outcome
+- Alternative scenarios can model different situations:
+  - High passing volume
+  - Run-heavy approach
+  - Rookie-focused usage
+  - Injury replacement situations
+
+**Scenario Cloning:**
+Scenarios can be cloned to create variations with specific adjustments, while preserving the baseline statistical foundation.
+
+### Projection Uncertainty
+
+Each projection includes statistical variance and confidence intervals.
+
+**Variance Calculation:**
+- Historical game-to-game variance when available
+- Position-specific variance coefficients
+- Years of historical data (more years = lower variance)
+- Consistency factor based on player history
+
+**Confidence Intervals:**
+The system provides multiple confidence intervals:
+- 50% intervals: Values with moderate likelihood
+- 80% intervals: Values with high likelihood (default)
+- 90% intervals: Values with very high likelihood
+- 95% intervals: Values with extremely high likelihood
+
+### Rookie Projections
+
+Rookies are projected using a specialized methodology that combines:
+
+**Rookie Projection Inputs:**
+- Draft position and draft capital
+- College production and efficiency metrics
+- Athletic testing results (combine data)
+- Team context and expected opportunity
+- Historical comparisons with similar player profiles
+
+**Three-Tiered Projections:**
+- Low projection (25th percentile outcome)
+- Medium projection (50th percentile outcome)
+- High projection (75th percentile outcome)
+
+### Fill Player System
+
+To maintain mathematical consistency between team projections and the sum of all player projections, the system includes an automatic fill player generation mechanism.
+
+**Fill Player Process:**
 1. Calculate team total stats (per position) for the full season
 2. Calculate sum of all player stats by position group
 3. Fill Player Stats = Team Total - Sum of Player Stats
 4. When Fill Player values are large or negative, this indicates needed adjustments
 
-## 4. Manual Override Implementation
-
-### 4.1 Direct Stat Overrides
-
-```python
-async def apply_stat_override(
-    self, player_id: str, stat_name: str, manual_value: float
-) -> Projection:
-    """Override a specific statistical value for a player."""
-    # Get current projection
-    projection = await self.projection_service.get_latest_projection(player_id)
-    if not projection:
-        raise ValueError(f"No projection found for player {player_id}")
-    
-    # Store original value
-    calculated_value = getattr(projection, stat_name)
-    
-    # Create override record
-    override = StatOverride(
-        player_id=player_id,
-        projection_id=projection.projection_id,
-        stat_name=stat_name,
-        calculated_value=calculated_value,
-        manual_value=manual_value
-    )
-    self.db.add(override)
-    
-    # Apply override to projection
-    setattr(projection, stat_name, manual_value)
-    projection.has_overrides = True
-    
-    # Recalculate dependent values
-    await self._recalculate_dependencies(projection, stat_name)
-    
-    self.db.commit()
-    return projection
+**Example:**
+```
+Team Total Pass Attempts: 650
+Sum of QB Pass Attempts: 550
+Fill QB Pass Attempts: 650 - 550 = 100
 ```
 
-### 4.2 Efficiency Factor Overrides
+## Implementation Details
 
-```python
-async def apply_efficiency_override(
-    self, player_id: str, metric_name: str, modifier: float
-) -> Dict[str, float]:
-    """Apply an efficiency adjustment for a player."""
-    # Get current projection
-    projection = await self.projection_service.get_latest_projection(player_id)
-    if not projection:
-        raise ValueError(f"No projection found for player {player_id}")
-    
-    # Get current value
-    current_value = getattr(projection, metric_name, None)
-    if current_value is None:
-        raise ValueError(f"Invalid efficiency metric: {metric_name}")
-    
-    # Calculate new value
-    new_value = current_value * modifier
-    
-    # Create override record
-    override = EfficiencyOverride(
-        player_id=player_id,
-        metric_name=metric_name,
-        default_value=current_value,
-        modifier=modifier,
-        final_value=new_value
-    )
-    self.db.add(override)
-    
-    # Apply to projection
-    setattr(projection, metric_name, new_value)
-    projection.has_overrides = True
-    
-    # Recalculate dependent stats
-    affected_stats = self._get_dependent_stats(metric_name)
-    updated_stats = await self._recalculate_stats_from_efficiency(
-        projection, metric_name, affected_stats
-    )
-    
-    self.db.commit()
-    return updated_stats
-```
+### Database Models
 
-### 4.3 Contextual Adjustments
-
-```python
-async def apply_contextual_adjustment(
-    self, adjustment_type: str, target_entities: Dict, 
-    affected_stats: Dict, description: str, severity: float
-) -> List[Projection]:
-    """Apply contextual adjustment to one or more players."""
-    # Create adjustment record
-    adjustment = ContextualAdjustment(
-        adjustment_type=adjustment_type,
-        player_id=target_entities.get("player_id"),
-        team=target_entities.get("team"),
-        position=target_entities.get("position"),
-        affected_stats=affected_stats,
-        description=description,
-        severity=severity
-    )
-    self.db.add(adjustment)
-    self.db.flush()
-    
-    # Find all affected projections
-    projections = await self._get_affected_projections(target_entities)
-    
-    # Apply adjustments to each projection
-    updated_projections = []
-    for proj in projections:
-        # Apply each stat adjustment
-        for stat, modifier in affected_stats.items():
-            if hasattr(proj, stat):
-                current_value = getattr(proj, stat)
-                new_value = current_value * modifier
-                setattr(proj, stat, new_value)
-                
-        # Mark as having overrides
-        proj.has_overrides = True
-        
-        # Recalculate dependent values
-        await self._recalculate_projection(proj)
-        updated_projections.append(proj)
-    
-    self.db.commit()
-    return updated_projections
-```
-
-### 4.4 Projection Scenarios
-
-```python
-async def create_scenario(
-    self, name: str, description: str = None, 
-    clone_from_id: str = None
-) -> ProjectionScenario:
-    """Create a new projection scenario."""
-    scenario = ProjectionScenario(
-        name=name,
-        description=description,
-        is_baseline=False
-    )
-    
-    self.db.add(scenario)
-    self.db.flush()
-    
-    # If cloning, copy all projections from source scenario
-    if clone_from_id:
-        await self._clone_scenario_projections(clone_from_id, scenario.scenario_id)
-    
-    self.db.commit()
-    return scenario
-
-async def generate_projection_with_overrides(
-    self, player_id: str, scenario_id: Optional[str] = None
-) -> Projection:
-    """Generate a projection incorporating all applicable overrides."""
-    # Start with base statistical projection
-    base_projection = await self.create_base_projection(player_id)
-    
-    # Apply efficiency overrides
-    efficiency_overrides = await self.override_service.get_efficiency_overrides(
-        player_id, scenario_id
-    )
-    for metric, modifier in efficiency_overrides.items():
-        if hasattr(base_projection, metric):
-            original = getattr(base_projection, metric)
-            setattr(base_projection, metric, original * modifier)
-    
-    # Apply direct stat overrides (these take precedence)
-    stat_overrides = await self.override_service.get_stat_overrides(
-        player_id, scenario_id
-    )
-    for stat, value in stat_overrides.items():
-        if hasattr(base_projection, stat):
-            setattr(base_projection, stat, value)
-    
-    # Apply contextual adjustments
-    await self._apply_contextual_adjustments(base_projection, scenario_id)
-    
-    # Recalculate dependent values
-    await self._recalculate_projection(base_projection)
-    
-    # Mark projection as including overrides
-    base_projection.has_overrides = True
-    
-    return base_projection
-```
-
-## 5. Usage Scenarios
-
-### 5.1 Baseline Projections
-
-```python
-# Generate base projections for all players
-async def generate_all_base_projections(season: int) -> List[Projection]:
-    players = await self.data_service.get_all_players()
-    
-    projections = []
-    for player in players:
-        projection = await self.create_base_projection(
-            player_id=player.player_id,
-            season=season
-        )
-        projections.append(projection)
-    
-    return projections
-```
-
-### 5.2 Player Overrides
-
-```python
-# Apply expert overrides to a player
-async def apply_expert_overrides(
-    player_id: str, overrides: Dict[str, float]
-) -> Projection:
-    projection = await self.get_latest_projection(player_id)
-    
-    for stat, value in overrides.items():
-        await self.override_service.create_stat_override(
-            player_id=player_id,
-            projection_id=projection.projection_id,
-            stat_name=stat,
-            manual_value=value,
-            notes="Expert override"
-        )
-    
-    # Get updated projection with overrides applied
-    return await self.override_service.get_projection_with_overrides(
-        projection.projection_id
-    )
-```
-
-### 5.3 Scenario Analysis
-
-```python
-# Create a "high usage" scenario for RBs
-async def create_high_usage_rb_scenario() -> List[Projection]:
-    # Create new scenario
-    scenario = await self.scenario_service.create_scenario(
-        name="High RB Usage",
-        description="Increased rushing attempts for starting RBs"
-    )
-    
-    # Get all starting RBs
-    rbs = await self.data_service.get_players_by_position("RB")
-    
-    # Apply contextual adjustment
-    adjustments = {
-        "car_pct": 1.15,      # 15% more rush share
-        "rush_attempts": 1.15,  # 15% more rushes
-        "targets": 1.05       # 5% more targets
-    }
-    
-    # Apply to all RBs
-    await self.override_service.apply_contextual_adjustment(
-        adjustment_type="usage",
-        target_entities={"position": "RB"},
-        affected_stats=adjustments,
-        description="Increased RB usage scenario",
-        severity=0.8
-    )
-    
-    # Generate all projections with this scenario
-    projections = []
-    for rb in rbs:
-        proj = await self.generate_projection_with_overrides(
-            player_id=rb.player_id,
-            scenario_id=scenario.scenario_id
-        )
-        projections.append(proj)
-    
-    return projections
-```
-
-## 6. Implementation Details
-
-### 6.1 Database Models
+The core projection system is implemented through several database models:
 
 ```python
 class Projection(Base):
@@ -596,152 +342,83 @@ class Projection(Base):
     stat_overrides = relationship("StatOverride", back_populates="projection")
 ```
 
-### 6.2 Services
+### Core Service Classes
+
+The projection system is implemented through several interconnected service classes:
+
+1. **ProjectionService**: Core projection calculations
+2. **TeamStatService**: Team-level statistics management
+3. **OverrideService**: Manual override handling
+4. **ScenarioService**: Scenario management
+5. **RookieProjectionService**: Specialized rookie projections
+6. **ProjectionVarianceService**: Uncertainty and confidence intervals
+
+### Override Implementation
 
 ```python
-class ProjectionService:
-    def __init__(self, db: Session):
-        self.db = db
-        self.data_service = DataService(db)
-        self.team_stats_service = TeamStatsService(db)
-        
-    async def create_base_projection(self, player_id: str, season: int) -> Projection:
-        """Create base projection from historical data."""
-        # Implementation...
-        
-    async def update_projection(self, projection_id: str, adjustments: Dict[str, float]) -> Projection:
-        """Update projection with adjustments."""
-        # Implementation...
-        
-    async def calculate_fantasy_points(self, projection: Projection) -> float:
-        """Calculate fantasy points with enhanced stats."""
-        points = 0.0
-        
-        # Passing points using net yards
-        if projection.net_pass_yards:
-            points += (projection.net_pass_yards / 25.0)
-        if projection.pass_td:
-            points += (projection.pass_td * 4.0)
-        if projection.interceptions:
-            points -= (projection.interceptions * 2.0)
-            
-        # Rushing points using net yards
-        if projection.net_rush_yards:
-            points += (projection.net_rush_yards / 10.0)
-        if projection.rush_td:
-            points += (projection.rush_td * 6.0)
-        
-        # Fumble penalty
-        if projection.fumbles_lost:
-            points -= (projection.fumbles_lost * 2.0)
-            
-        # Receiving points
-        if projection.receptions:
-            points += (projection.receptions * 0.5)
-        if projection.rec_yards:
-            points += (projection.rec_yards / 10.0)
-        if projection.rec_td:
-            points += (projection.rec_td * 6.0)
-            
-        return points
+async def apply_stat_override(
+    self, player_id: str, stat_name: str, manual_value: float
+) -> Projection:
+    """Override a specific statistical value for a player."""
+    # Get current projection
+    projection = await self.projection_service.get_latest_projection(player_id)
+    if not projection:
+        raise ValueError(f"No projection found for player {player_id}")
+    
+    # Store original value
+    calculated_value = getattr(projection, stat_name)
+    
+    # Create override record
+    override = StatOverride(
+        player_id=player_id,
+        projection_id=projection.projection_id,
+        stat_name=stat_name,
+        calculated_value=calculated_value,
+        manual_value=manual_value
+    )
+    self.db.add(override)
+    
+    # Apply override to projection
+    setattr(projection, stat_name, manual_value)
+    projection.has_overrides = True
+    
+    # Recalculate dependent values
+    await self._recalculate_dependencies(projection, stat_name)
+    
+    self.db.commit()
+    return projection
 ```
 
-## 7. User Interface
+### Dependency Recalculation
 
-### 7.1 Projection Editor
+When a statistical value is modified through an override, dependent values are automatically recalculated using a dependency graph. Examples:
 
-The system includes a comprehensive UI for editing projections:
+- If pass attempts are modified, completions, passing yards, and passing TDs are recalculated
+- If target share is modified, targets, receptions, receiving yards, and receiving TDs are recalculated
+- If efficiency metrics are modified, the corresponding volume stats are recalculated
 
-- Multi-tab interface (passing, rushing, receiving stats)
-- Visual indicators for overridden values
-- Comparison view (original vs. adjusted)
-- Real-time recalculation of dependent values
-- Notes field for override rationale
+## Model Validation
 
-### 7.2 Scenario Management
+The projection system's accuracy is validated through:
 
-The system includes a scenario management interface:
+1. **Historical backtesting** against actual performance
+2. **Mathematical consistency checks** (team totals match player sums)
+3. **Comparison with external projections** from major fantasy sites
+4. **Fill player analysis** to identify model inconsistencies
+5. **Expert review and adjustment**
 
-- Create, clone, and manage scenarios
-- Apply scenario-specific adjustments
-- Compare multiple scenarios
-- Export scenario data
+## Future Enhancements
 
-### 7.3 Batch Operations
+Planned improvements to the projection methodology include:
 
-The system supports batch operations:
+1. **Machine learning integration** for baseline projections
+2. **Strength of schedule adjustments**
+3. **Game script dependency modeling**
+4. **Player archetype classification**
+5. **Injury impact modeling**
+6. **Additional scoring format support**
+7. **Time-series based uncertainty analysis**
 
-- Apply the same adjustment to multiple players
-- Position-based adjustments
-- Team-based adjustments
-- Template-based contextual adjustments
-
-## 8. Model Validation
-
-The model's accuracy is validated through:
-
-1. Historical backtesting against actual performance
-2. Mathematical consistency checks (team totals match player sums)
-3. Comparison with public projections from major fantasy sites
-4. Fill player analysis to identify model inconsistencies
-5. Expert review and adjustment
-
-## 9. Projection Uncertainty and Confidence Intervals
-
-The model now incorporates statistical uncertainty and confidence intervals:
-
-### 9.1 Variance Calculation
-
-Each projected stat has an associated variance calculated using:
-
-1. Historical game-to-game variance when available
-2. Position-specific baseline variance coefficients
-3. Years of historical data (more years = lower variance)
-4. Position-specific consistency factors
-
-### 9.2 Confidence Intervals
-
-The system provides multiple confidence interval levels:
-
-- 50% intervals: Values with moderate likelihood
-- 80% intervals: Values with high likelihood (default)
-- 90% intervals: Values with very high likelihood
-- 95% intervals: Values with extremely high likelihood
-
-### 9.3 Rookie Projection Methodology
-
-Rookie projections use a specialized methodology combining:
-
-1. Historical comparisons with similar draft profile players
-2. Draft position adjustment factor
-3. Team context and opportunity assessment
-4. Position-specific model (QB, RB, WR, TE)
-5. Three-tiered projection system (high, medium, low)
-
-## 10. Future Enhancements
-
-Planned improvements include:
-
-1. Advanced machine learning integration for baseline projections
-2. Strength of schedule adjustment factors
-3. Game script dependency modeling
-4. Player archetype classification for more accurate projections
-5. Injury impact modeling
-6. Additional scoring format support
-7. Time-series based uncertainty analysis
-
-## 11. Conclusion
+## Conclusion
 
 This enhanced projection model combines statistical rigor with expert judgment through its sophisticated override system. The model maintains mathematical consistency while allowing for flexible adjustments based on changing circumstances, news, and expert analysis. By supporting multiple projection scenarios, statistical uncertainty modeling, and team-level adjustments, the system enables comprehensive fantasy football analysis and decision-making.
-
-## Appendix A: Statistical Formulas
-
-### A.1 Enhanced Efficiency Metrics
-- Net Yards per Attempt = (Passing Yards - Sack Yards) / (Pass Attempts + Sacks)
-- Net Yards per Carry = (Rushing Yards - [Fumbles × Avg Yards Lost per Fumble]) / Carries
-- Adjusted Touchdown Rate = TDs / (Opportunities × League Average Modifier)
-
-### A.2 Advanced Usage Metrics
-- Weighted Opportunity Share = (Rush Share × 0.7) + (Target Share × 1.0) + (Red Zone Share × 1.3)
-- Expected Fantasy Points = Σ (Opportunity × Average Fantasy Value per Opportunity Type)
-- Fantasy Points Over Expected (FPOE) = Actual Fantasy Points - Expected Fantasy Points
