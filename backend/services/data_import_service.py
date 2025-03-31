@@ -2,15 +2,16 @@ from typing import Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import and_
+import asyncio
 import pandas as pd
 import logging
-import asyncio
 import random
 import time
 from datetime import datetime, timedelta
 import uuid
 import json
 import requests
+import aiohttp
 from bs4 import BeautifulSoup
 from pathlib import Path
 from pro_football_reference_web_scraper import player_game_log
@@ -464,7 +465,7 @@ class DataImportService:
         delay = random.uniform(self.min_delay, self.max_delay)
         await asyncio.sleep(delay)
         
-    async def _request_with_backoff(self, url: str, max_retries: int = 3) -> requests.Response:
+    async def _request_with_backoff(self, url: str, max_retries: int = 3, delay_factor: float = 1.0) -> requests.Response:
         """Make HTTP request with exponential backoff for rate limiting."""
         # Check if circuit breaker is open
         if self.circuit_breaker.is_open():
@@ -472,16 +473,27 @@ class DataImportService:
             
         for attempt in range(max_retries):
             try:
+                # Using requests library for simplicity in tests
                 response = requests.get(url)
                 response.raise_for_status()
+                
+                # Reset circuit breaker on success
+                if attempt > 0:
+                    self.circuit_breaker.reset()
+                    
                 return response
+                
             except requests.exceptions.HTTPError as e:
                 if hasattr(e, 'response') and e.response.status_code == 429 and attempt < max_retries - 1:
                     # Record rate limit event in circuit breaker
                     self.circuit_breaker.record_failure()
                     
-                    wait_time = (2 ** attempt) * self.min_delay
-                    logger.warning(f"Rate limited. Waiting {wait_time}s before retry. Attempt {attempt+1}/{max_retries}")
+                    # Exponential backoff with jitter
+                    wait_time = (2 ** attempt) * delay_factor * self.min_delay
+                    jitter = random.uniform(0.8, 1.2)  # Add 20% jitter
+                    wait_time *= jitter
+                    
+                    logger.warning(f"Rate limited. Waiting {wait_time:.2f}s before retry. Attempt {attempt+1}/{max_retries}")
                     await asyncio.sleep(wait_time)
                 else:
                     if hasattr(e, 'response') and e.response.status_code == 429:
@@ -489,18 +501,11 @@ class DataImportService:
                         # record as failure and potentially open circuit breaker
                         self.circuit_breaker.record_failure()
                     raise
-        
-    async def _request_with_backoff(self, url: str, max_retries: int = 3) -> requests.Response:
-        """Make HTTP request with exponential backoff for rate limiting."""
-        for attempt in range(max_retries):
-            try:
-                response = requests.get(url)
-                response.raise_for_status()
-                return response
-            except requests.exceptions.HTTPError as e:
-                if e.response.status_code == 429 and attempt < max_retries - 1:
-                    wait_time = (2 ** attempt) * self.min_delay
-                    logger.warning(f"Rate limited. Waiting {wait_time}s before retry")
+            except Exception as e:
+                # Other errors (network, etc.)
+                logger.error(f"Request error: {str(e)}")
+                if attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) * delay_factor
                     await asyncio.sleep(wait_time)
                 else:
                     raise

@@ -30,6 +30,9 @@
 - [x] Expand unit test coverage for projection algorithms
 - [x] Add integration tests for the complete projection pipeline
 - [x] Implement end-to-end tests for critical user flows
+- [x] Add comprehensive tests for the override service
+- [x] Add integration tests for override-projection interaction
+- [ ] Complete API route tests with schema validation fixes
 - [ ] Set up automated test runs in CI/CD pipeline
 
 ## Documentation
@@ -62,7 +65,7 @@
   - [x] Add batch operations for rookie updates
   - [x] Support automatic projection creation after draft
 
-## Phase 3 [Expanded Testing](expandedtesting.md)
+## Phase 3 
 
 ### Essential Unit Testing
 - [x] Test ProjectionService adjustment factors and projection creation/updates
@@ -100,8 +103,49 @@
 - [x] Test batch size and delay parameters
 - [x] Test interruption and recovery during batch import
 
-### Deployment
-- [ ] Set up proper environment configuration
-- [ ] Implement database migration strategy
-- [ ] Configure production deployment pipeline
-- [ ] Set up monitoring and logging
+
+## Phase 4: Enhanced Player Data Management 
+
+### Database Seeding and Player Import Improvements
+- [x] Create seed_database.py script to populate the database from active_players.csv
+- [x] Enhance convert_rookies.py to handle additional player attributes
+  - [x] Support for height, weight, and date of birth
+  - [x] Add player physical measurements processing
+  - [x] Support multiple input formats (CSV and Excel)
+- [x] Add unit tests for the new seeding functionality
+
+### Support for Enhanced Player Attributes
+- [x] Update Player model and services to use the extended player data
+- [x] Create API endpoints for accessing enhanced player attributes
+- [x] Improve rookie import to properly handle player measurements
+- [x] Add depth chart data integration with player details
+
+### Player Import Format Flexibility
+- [x] Refactor rookie import to accept both CSV and Excel formats
+- [x] Implement common processing path after loading either format
+- [x] Add validation for the enhanced player attributes
+- [x] Create comprehensive test coverage for the player import functionality
+
+## Phase 5: Production Deployment
+
+### Containerization
+- [ ] Create Docker configuration for the backend
+- [ ] Configure Docker Compose for local development
+- [ ] Set up multi-stage build process for frontend
+
+### Database Migration
+- [ ] Create Alembic migration scripts
+- [ ] Set up automated database migration process
+- [ ] Implement backup and restore procedures
+
+### Monitoring and Logging
+- [ ] Set up structured logging
+- [ ] Implement health check endpoints
+- [ ] Configure monitoring dashboards
+- [ ] Add performance tracking metrics
+
+### CI/CD Pipeline
+- [ ] Set up automated testing workflow
+- [ ] Implement build and deployment pipeline
+- [ ] Configure environment-specific configurations
+- [ ] Add automated documentation generation

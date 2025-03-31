@@ -54,10 +54,15 @@ class TestDataValidation:
         games = []
         for week in range(1, 16):
             game = GameStats(
+                game_stat_id=str(uuid.uuid4()),
                 player_id=player.player_id,
                 season=season,
                 week=week,
                 opponent="OPP",
+                game_location="home",  # Required field
+                result="W",            # Required field
+                team_score=27,         # Required field
+                opponent_score=17,     # Required field
                 stats={
                     "cmp": "22",
                     "att": "33",

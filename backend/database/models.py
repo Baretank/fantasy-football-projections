@@ -5,6 +5,17 @@ from typing import Dict, Optional
 from .database import Base
 import uuid
 
+class ImportLog(Base):
+    """Log for import operations and errors"""
+    __tablename__ = "import_logs"
+    
+    log_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    operation: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)  # success, failure, warning
+    message: Mapped[str] = mapped_column(String, nullable=False)
+    details: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
 class GameStats(Base):
     """Game-by-game player statistics"""
     __tablename__ = "game_stats"
@@ -67,6 +78,7 @@ class Player(Base):
     weight: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # In pounds
     status: Mapped[str] = mapped_column(String, default="Active")  # Active, Injured, Rookie
     depth_chart_position: Mapped[str] = mapped_column(String, default="Backup")  # Starter, Backup, Reserve
+    is_fill_player: Mapped[bool] = mapped_column(Boolean, default=False)  # Whether this is a fill player (for team stats reconciliation)
     
     # Draft information fields
     draft_position: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Overall draft position
@@ -117,7 +129,6 @@ class TeamStat(Base):
     rush_attempts: Mapped[float] = mapped_column(Float)
     rush_yards: Mapped[float] = mapped_column(Float)
     rush_td: Mapped[float] = mapped_column(Float)
-    carries: Mapped[float] = mapped_column(Float)
     rush_yards_per_carry: Mapped[float] = mapped_column(Float)
     targets: Mapped[float] = mapped_column(Float)
     receptions: Mapped[float] = mapped_column(Float)
@@ -142,7 +153,6 @@ class TeamStat(Base):
             rush_attempts=data['RuATT'],
             rush_yards=data['RuYD'],
             rush_td=data['RuTD'],
-            carries=data['Car'],
             rush_yards_per_carry=data['YPC'],
             targets=data['Tar'],
             receptions=data['Rec'],
@@ -181,7 +191,7 @@ class Projection(Base):
     sack_rate: Mapped[Optional[float]] = mapped_column(Float)
     
     # Rushing stats (All positions)
-    carries: Mapped[Optional[float]] = mapped_column(Float)
+    rush_attempts: Mapped[Optional[float]] = mapped_column(Float)
     rush_yards: Mapped[Optional[float]] = mapped_column(Float)
     rush_td: Mapped[Optional[float]] = mapped_column(Float)
     
@@ -209,7 +219,7 @@ class Projection(Base):
     comp_pct: Mapped[Optional[float]] = mapped_column(Float)      # completion percentage
     yards_per_att: Mapped[Optional[float]] = mapped_column(Float) # gross YPA
     net_yards_per_att: Mapped[Optional[float]] = mapped_column(Float) # net YPA
-    car_pct: Mapped[Optional[float]] = mapped_column(Float)       # % of team rush attempts
+    rush_att_pct: Mapped[Optional[float]] = mapped_column(Float)  # % of team rush attempts
     yards_per_carry: Mapped[Optional[float]] = mapped_column(Float) # gross YPC
     net_yards_per_carry: Mapped[Optional[float]] = mapped_column(Float) # net YPC
     tar_pct: Mapped[Optional[float]] = mapped_column(Float)       # % of team targets
@@ -247,13 +257,13 @@ class Projection(Base):
                 'pass_yards': data.get('PaYD'),
                 'pass_td': data.get('PaTD'),
                 'interceptions': data.get('INT'),
-                'carries': data.get('Car'),
+                'rush_attempts': data.get('Car') or data.get('RuATT'),
                 'rush_yards': data.get('RuYD'),
                 'rush_td': data.get('RuTD')
             })
         elif data['Pos'] in ['RB', 'WR', 'TE']:
             base.update({
-                'carries': data.get('Car'),
+                'rush_attempts': data.get('Car') or data.get('RuATT'),
                 'rush_yards': data.get('RuYD'),
                 'rush_td': data.get('RuTD'),
                 'targets': data.get('Tar'),

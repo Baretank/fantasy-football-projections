@@ -5,7 +5,7 @@ from datetime import datetime
 import uuid
 import logging
 
-from backend.database.models import Scenario, Projection, Player, StatOverride
+from backend.database.models import Scenario, Projection, Player, StatOverride, TeamStat
 from backend.services.projection_service import ProjectionService
 from backend.services.override_service import OverrideService
 
@@ -409,5 +409,359 @@ class ScenarioService:
         Returns:
             List of created fill player projections
         """
-        # Implementation will be added in future development phase
-        pass
+        try:
+            # Verify scenario exists
+            scenario = await self.get_scenario(scenario_id)
+            if not scenario:
+                logger.error(f"Scenario {scenario_id} not found")
+                return []
+                
+            # Get team statistics
+            team_stats = self.db.query(TeamStat).filter(
+                and_(TeamStat.team == team, TeamStat.season == season)
+            ).first()
+            
+            if not team_stats:
+                logger.error(f"Team stats for {team} in {season} not found")
+                return []
+                
+            # Get existing team projections for this scenario
+            team_projections = await self.get_scenario_projections(
+                scenario_id=scenario_id,
+                team=team
+            )
+            
+            # Calculate team totals from existing projections
+            team_totals = {
+                "pass_attempts": 0,
+                "pass_yards": 0,
+                "pass_td": 0,
+                "carries": 0,  # Using carries instead of rush_attempts to match model
+                "rush_yards": 0,
+                "rush_td": 0,
+                "targets": 0,
+                "receptions": 0,
+                "rec_yards": 0,
+                "rec_td": 0
+            }
+            
+            for proj in team_projections:
+                for stat in team_totals:
+                    if getattr(proj, stat) is not None:
+                        team_totals[stat] += getattr(proj, stat)
+            
+            # Check if we need to create fill projections
+            differences = {
+                "pass_attempts": team_stats.pass_attempts - team_totals["pass_attempts"],
+                "pass_yards": team_stats.pass_yards - team_totals["pass_yards"],
+                "pass_td": team_stats.pass_td - team_totals["pass_td"],
+                "carries": team_stats.carries - team_totals["carries"],  # Using carries instead of rush_attempts
+                "rush_yards": team_stats.rush_yards - team_totals["rush_yards"],
+                "rush_td": team_stats.rush_td - team_totals["rush_td"],
+                "targets": team_stats.targets - team_totals["targets"],
+                "receptions": team_stats.receptions - team_totals["receptions"],
+                "rec_yards": team_stats.rec_yards - team_totals["rec_yards"],
+                "rec_td": team_stats.rec_td - team_totals["rec_td"]
+            }
+            
+            # No need to create fill projections if everything balances
+            if all(abs(v) < 0.1 for v in differences.values()):
+                return []
+                
+            # Create fill players by position
+            fill_projections = []
+            
+            # QB fill player (if needed)
+            if differences["pass_attempts"] > 0 or differences["pass_yards"] > 0 or differences["pass_td"] > 0:
+                qb_fill = await self._create_fill_player(
+                    scenario_id=scenario_id,
+                    team=team,
+                    position="QB",
+                    season=season,
+                    stats={
+                        "pass_attempts": max(0, differences["pass_attempts"]),
+                        "pass_yards": max(0, differences["pass_yards"]),
+                        "pass_td": max(0, differences["pass_td"]),
+                        "carries": 0,  # Using carries instead of rush_attempts
+                        "rush_yards": 0,
+                        "rush_td": 0
+                    }
+                )
+                if qb_fill:
+                    fill_projections.append(qb_fill)
+            
+            # RB fill player (if needed)
+            if differences["carries"] > 0 or differences["rush_yards"] > 0 or differences["rush_td"] > 0:
+                rb_fill = await self._create_fill_player(
+                    scenario_id=scenario_id,
+                    team=team,
+                    position="RB",
+                    season=season,
+                    stats={
+                        "carries": max(0, differences["carries"]),  # Using carries instead of rush_attempts
+                        "rush_yards": max(0, differences["rush_yards"]),
+                        "rush_td": max(0, differences["rush_td"]),
+                        "targets": 0,
+                        "receptions": 0,
+                        "rec_yards": 0,
+                        "rec_td": 0
+                    }
+                )
+                if rb_fill:
+                    fill_projections.append(rb_fill)
+            
+            # WR fill player (if needed)
+            if differences["targets"] > 0 or differences["receptions"] > 0 or differences["rec_yards"] > 0 or differences["rec_td"] > 0:
+                wr_fill = await self._create_fill_player(
+                    scenario_id=scenario_id,
+                    team=team,
+                    position="WR",
+                    season=season,
+                    stats={
+                        "targets": max(0, differences["targets"]),
+                        "receptions": max(0, differences["receptions"]),
+                        "rec_yards": max(0, differences["rec_yards"]),
+                        "rec_td": max(0, differences["rec_td"])
+                    }
+                )
+                if wr_fill:
+                    fill_projections.append(wr_fill)
+                    
+            return fill_projections
+            
+        except Exception as e:
+            logger.error(f"Error generating fill players: {str(e)}")
+            self.db.rollback()
+            return []
+            
+    async def add_player_to_scenario(
+        self,
+        scenario_id: str,
+        player_id: str,
+        adjustments: Dict[str, float]
+    ) -> Optional[Projection]:
+        """
+        Add a player to a scenario with specific stat adjustments.
+        
+        Args:
+            scenario_id: The scenario ID
+            player_id: The player ID to add to scenario
+            adjustments: Dictionary of stat adjustments to apply
+            
+        Returns:
+            Created scenario projection or None if failed
+        """
+        try:
+            # Verify scenario exists
+            scenario = await self.get_scenario(scenario_id)
+            if not scenario:
+                logger.error(f"Scenario {scenario_id} not found")
+                return None
+                
+            # Get the player
+            player = self.db.query(Player).filter(Player.player_id == player_id).first()
+            if not player:
+                logger.error(f"Player {player_id} not found")
+                return None
+                
+            # Check if player already has a projection in this scenario
+            existing_proj = self.db.query(Projection).filter(
+                and_(
+                    Projection.player_id == player_id,
+                    Projection.scenario_id == scenario_id
+                )
+            ).first()
+            
+            if existing_proj:
+                # Update existing projection
+                for stat, value in adjustments.items():
+                    if hasattr(existing_proj, stat):
+                        setattr(existing_proj, stat, value)
+                
+                # Recalculate fantasy points
+                if hasattr(existing_proj, "calculate_fantasy_points"):
+                    existing_proj.half_ppr = existing_proj.calculate_fantasy_points()
+                
+                self.db.commit()
+                return existing_proj
+            
+            # Find the base projection for this player
+            base_proj = self.db.query(Projection).filter(
+                and_(
+                    Projection.player_id == player_id,
+                    Projection.scenario_id.is_(None)
+                )
+            ).order_by(Projection.created_at.desc()).first()
+            
+            if not base_proj:
+                logger.error(f"No base projection found for player {player_id}")
+                return None
+                
+            # Create a new projection for this scenario
+            new_proj = Projection(
+                projection_id=str(uuid.uuid4()),
+                player_id=player_id,
+                scenario_id=scenario_id,
+                season=base_proj.season,
+                games=base_proj.games,
+                half_ppr=base_proj.half_ppr
+            )
+            
+            # Copy all stats from base projection
+            for column in Projection.__table__.columns:
+                if column.name not in ['projection_id', 'player_id', 'scenario_id', 'created_at', 'updated_at']:
+                    setattr(new_proj, column.name, getattr(base_proj, column.name))
+            
+            # Apply adjustments
+            for stat, value in adjustments.items():
+                if hasattr(new_proj, stat):
+                    setattr(new_proj, stat, value)
+            
+            # Recalculate fantasy points
+            if hasattr(new_proj, "calculate_fantasy_points"):
+                new_proj.half_ppr = new_proj.calculate_fantasy_points()
+            
+            self.db.add(new_proj)
+            self.db.commit()
+            
+            return new_proj
+            
+        except Exception as e:
+            logger.error(f"Error adding player to scenario: {str(e)}")
+            self.db.rollback()
+            return None
+    
+    async def get_player_scenario_projection(
+        self,
+        scenario_id: str,
+        player_id: str
+    ) -> Optional[Projection]:
+        """
+        Get a player's projection for a specific scenario.
+        
+        Args:
+            scenario_id: The scenario ID
+            player_id: The player ID
+            
+        Returns:
+            Projection object or None if not found
+        """
+        try:
+            return self.db.query(Projection).filter(
+                and_(
+                    Projection.player_id == player_id,
+                    Projection.scenario_id == scenario_id
+                )
+            ).first()
+        except Exception as e:
+            logger.error(f"Error getting player scenario projection: {str(e)}")
+            return None
+            
+    async def _create_fill_player(
+        self,
+        scenario_id: str,
+        team: str,
+        position: str,
+        season: int,
+        stats: Dict
+    ) -> Optional[Projection]:
+        """
+        Helper method to create a fill player projection.
+        
+        Args:
+            scenario_id: Scenario ID
+            team: Team abbreviation
+            position: Player position
+            season: Season year
+            stats: Dictionary of stats to set
+            
+        Returns:
+            Created Projection object or None if failed
+        """
+        try:
+            # Create a fill player
+            player_name = f"{team} Fill {position}"
+            player_id = None
+            
+            # Check if fill player already exists
+            existing_player = self.db.query(Player).filter(
+                and_(Player.name == player_name, Player.team == team)
+            ).first()
+            
+            if existing_player:
+                player_id = existing_player.player_id
+            else:
+                # Create new fill player
+                new_player = Player(
+                    player_id=str(uuid.uuid4()),
+                    name=player_name,
+                    team=team,
+                    position=position,
+                    is_fill_player=True
+                )
+                self.db.add(new_player)
+                self.db.flush()
+                player_id = new_player.player_id
+                
+            # Check if this player already has a projection in this scenario
+            existing_projection = self.db.query(Projection).filter(
+                and_(
+                    Projection.player_id == player_id,
+                    Projection.scenario_id == scenario_id
+                )
+            ).first()
+            
+            if existing_projection:
+                # Update existing projection
+                for stat, value in stats.items():
+                    if hasattr(existing_projection, stat):
+                        setattr(existing_projection, stat, value)
+                
+                existing_projection.is_fill_player = True
+                self.db.commit()
+                return existing_projection
+            else:
+                # Create new projection with fill stats
+                projection = Projection(
+                    projection_id=str(uuid.uuid4()),
+                    player_id=player_id,
+                    scenario_id=scenario_id,
+                    season=season,
+                    games=17,  # Default to full season
+                    is_fill_player=True,
+                    has_overrides=False
+                )
+                
+                # Set all the stats
+                for stat, value in stats.items():
+                    if hasattr(projection, stat):
+                        setattr(projection, stat, value)
+                        
+                # Calculate half_ppr points
+                half_ppr = 0
+                if position == "QB":
+                    half_ppr = (
+                        stats.get("pass_td", 0) * 4 +
+                        stats.get("pass_yards", 0) * 0.04 +
+                        stats.get("rush_td", 0) * 6 +
+                        stats.get("rush_yards", 0) * 0.1
+                    )
+                elif position in ["RB", "WR", "TE"]:
+                    half_ppr = (
+                        stats.get("rush_td", 0) * 6 +
+                        stats.get("rush_yards", 0) * 0.1 +
+                        stats.get("rec_td", 0) * 6 +
+                        stats.get("rec_yards", 0) * 0.1 +
+                        stats.get("receptions", 0) * 0.5
+                    )
+                    
+                projection.half_ppr = half_ppr
+                
+                self.db.add(projection)
+                self.db.commit()
+                return projection
+                
+        except Exception as e:
+            logger.error(f"Error creating fill player: {str(e)}")
+            self.db.rollback()
+            return None

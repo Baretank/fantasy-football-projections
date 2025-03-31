@@ -80,11 +80,28 @@ venv.bak/
 profile_default/
 ipython_config.py
 
+# Python test outputs
+htmlcov/
+coverage.xml
+.coverage.*
+.pytest_cache/
+nosetests.xml
+
 # Database
 *.db
 *.sqlite3
-rookie_projections.xlsx
 *.sqlite
+backend/data/*.db
+backend/data/*.sqlite
+backend/data/*.sqlite3
+
+# Data files
+rookie_projections.xlsx
+rookie_baseline.xlsx
+active_players.csv
+backend/data/*.csv
+backend/data/*.json
+backend/data/*.xlsx
 
 # Conda
 .conda/
@@ -101,3 +118,20 @@ logs/
 
 # Generated data
 _generated/
+run_test_output/
+test-results/
+test_output/
+
+# System specific
+**/.DS_Store
+**/__MACOSX
+.idea/
+.VSCodeCounter/
+.history/
+*.swp
+*~
+
+# Local configuration
+CLAUDE.md
+backend/CLAUDE.md
+frontend/CLAUDE.md

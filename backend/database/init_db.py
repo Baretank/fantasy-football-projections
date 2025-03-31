@@ -8,7 +8,7 @@ project_root = str(Path(__file__).parent.parent.parent)
 sys.path.insert(0, project_root)
 
 from backend.database.database import engine, Base, SessionLocal
-from backend.database.models import Player, BaseStat, Projection, TeamStat, RookieProjectionTemplate
+from backend.database.models import Player, BaseStat, Projection, TeamStat, RookieProjectionTemplate, ImportLog
 
 def init_db():
     """Initialize database and required data files."""

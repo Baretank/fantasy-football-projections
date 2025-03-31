@@ -101,10 +101,17 @@ class ProjectionService:
     ) -> Optional[Projection]:
         """Update an existing projection with adjustments."""
         try:
-            projection = await self.get_projection(projection_id)
+            # Use a join to get both the projection and the player in one query
+            projection = self.db.query(Projection).join(Player).filter(
+                Projection.projection_id == projection_id
+            ).first()
+            
             if not projection:
                 return None
                 
+            # Get the player object
+            player = projection.player
+            
             # Validate adjustments
             if not await self.validate_adjustments(projection.player_id, adjustments):
                 logger.error("Invalid adjustments provided")
@@ -112,19 +119,137 @@ class ProjectionService:
                 
             # Get team context
             team_stats = self.db.query(TeamStat).filter(
-                and_(TeamStat.team == projection.player.team,
+                and_(TeamStat.team == player.team,
                      TeamStat.season == projection.season)
             ).first()
             
-            # Apply adjustments
-            await self._adjust_stats(projection, team_stats, adjustments)
+            # Make a deep copy of the projection for modification
+            # We'll modify this copy and then persist it
+            projection_values = {
+                'projection_id': projection_id,
+                'player_id': projection.player_id,
+                'scenario_id': projection.scenario_id,
+                'season': projection.season,
+                'games': projection.games,
+                'half_ppr': projection.half_ppr,
                 
-            # Recalculate fantasy points
-            projection.half_ppr = projection.calculate_fantasy_points()
-            projection.updated_at = datetime.utcnow()
+                # Copy all the fields that might be adjusted
+                'pass_attempts': projection.pass_attempts,
+                'completions': projection.completions,
+                'pass_yards': projection.pass_yards,
+                'pass_td': projection.pass_td,
+                'interceptions': projection.interceptions,
+                'carries': projection.carries,
+                'rush_yards': projection.rush_yards,
+                'rush_td': projection.rush_td,
+                'targets': projection.targets,
+                'receptions': projection.receptions,
+                'rec_yards': projection.rec_yards,
+                'rec_td': projection.rec_td,
+                
+                # Efficiency metrics
+                'yards_per_att': projection.yards_per_att,
+                'comp_pct': projection.comp_pct,
+                'pass_td_rate': projection.pass_td_rate,
+                'yards_per_carry': projection.yards_per_carry,
+                'catch_pct': projection.catch_pct,
+                'yards_per_target': projection.yards_per_target,
+                'rec_td_rate': projection.rec_td_rate,
+                
+                # Other fields
+                'snap_share': projection.snap_share,
+                'target_share': projection.target_share,
+                'rush_share': projection.rush_share,
+                
+                # Mark as updated
+                'updated_at': datetime.utcnow()
+            }
+            
+            # Apply adjustments based on player position
+            if player.position == 'QB':
+                # QB adjustments
+                if 'pass_volume' in adjustments:
+                    factor = adjustments['pass_volume']
+                    projection_values['pass_attempts'] *= factor
+                    projection_values['completions'] *= factor
+                    projection_values['pass_yards'] *= factor
+                    if projection_values['pass_attempts'] > 0:
+                        projection_values['yards_per_att'] = projection_values['pass_yards'] / projection_values['pass_attempts']
+                        projection_values['comp_pct'] = projection_values['completions'] / projection_values['pass_attempts'] * 100
+                
+                if 'td_rate' in adjustments:
+                    projection_values['pass_td'] *= adjustments['td_rate']
+                    if projection_values['pass_attempts'] > 0:
+                        projection_values['pass_td_rate'] = projection_values['pass_td'] / projection_values['pass_attempts']
+                
+                if 'int_rate' in adjustments:
+                    projection_values['interceptions'] *= adjustments['int_rate']
+                    
+                if 'rush_volume' in adjustments:
+                    factor = adjustments['rush_volume']
+                    projection_values['carries'] *= factor
+                    projection_values['rush_yards'] *= factor
+                    projection_values['rush_td'] *= factor
+                    if projection_values['carries'] > 0:
+                        projection_values['yards_per_carry'] = projection_values['rush_yards'] / projection_values['carries']
+                
+            elif player.position == 'RB':
+                # RB adjustments
+                if 'rush_volume' in adjustments:
+                    factor = adjustments['rush_volume']
+                    projection_values['carries'] *= factor
+                    projection_values['rush_yards'] *= factor
+                    projection_values['rush_td'] *= factor
+                    if projection_values['carries'] > 0:
+                        projection_values['yards_per_carry'] = projection_values['rush_yards'] / projection_values['carries']
+                
+                if 'target_share' in adjustments:
+                    factor = adjustments['target_share']
+                    projection_values['targets'] *= factor
+                    projection_values['receptions'] *= (factor * 0.95)
+                    projection_values['rec_yards'] *= factor
+                    projection_values['rec_td'] *= factor
+                    if projection_values['targets'] > 0:
+                        projection_values['catch_pct'] = projection_values['receptions'] / projection_values['targets'] * 100
+                        projection_values['yards_per_target'] = projection_values['rec_yards'] / projection_values['targets']
+                        projection_values['rec_td_rate'] = projection_values['rec_td'] / projection_values['targets']
+            
+            elif player.position in ['WR', 'TE']:
+                # WR/TE adjustments
+                if 'target_share' in adjustments:
+                    factor = adjustments['target_share']
+                    projection_values['targets'] *= factor
+                    projection_values['receptions'] *= (factor * 0.95)
+                    projection_values['rec_yards'] *= factor
+                    projection_values['rec_td'] *= factor
+                    if projection_values['targets'] > 0:
+                        projection_values['catch_pct'] = projection_values['receptions'] / projection_values['targets'] * 100
+                        projection_values['yards_per_target'] = projection_values['rec_yards'] / projection_values['targets']
+                        projection_values['rec_td_rate'] = projection_values['rec_td'] / projection_values['targets']
+                
+                if 'snap_share' in adjustments:
+                    projection_values['snap_share'] = min(1.0, (projection_values['snap_share'] or 0.0) * adjustments['snap_share'])
+            
+            # Calculate fantasy points
+            # First, update the projection with our adjusted values
+            for key, value in projection_values.items():
+                setattr(projection, key, value)
+            
+            # Calculate fantasy points
+            projection_values['half_ppr'] = projection.calculate_fantasy_points()
+            
+            # Persist the changes - update the existing record with our values
+            update_stmt = {key: value for key, value in projection_values.items() 
+                          if key != 'projection_id'}  # exclude primary key
+            
+            self.db.query(Projection).filter(
+                Projection.projection_id == projection_id
+            ).update(update_stmt)
             
             self.db.commit()
-            return projection
+            
+            # Return the updated projection
+            return self.db.query(Projection).get(projection_id)
             
         except Exception as e:
             logger.error(f"Error updating projection: {str(e)}")
@@ -366,6 +491,11 @@ class ProjectionService:
         adjuster = position_adjusters.get(projection.player.position)
         if adjuster:
             await adjuster(projection, team_stats, adjustments)
+            
+        # Create a new instance with the same ID to ensure updates are tracked by SQLAlchemy
+        # The adjustment changes weren't being persisted because we're modifying the same object
+        projection.updated_at = datetime.utcnow()
+        self.db.flush()
 
     async def _adjust_qb_stats(
         self, 
@@ -376,21 +506,23 @@ class ProjectionService:
         """Adjust QB-specific statistics."""
         if 'pass_volume' in adjustments:
             factor = adjustments['pass_volume']
-            projection.pass_attempts *= factor
-            projection.completions *= factor
-            projection.pass_yards *= factor
+            projection.pass_attempts = projection.pass_attempts * factor
+            projection.completions = projection.completions * factor
+            projection.pass_yards = projection.pass_yards * factor
             
         if 'td_rate' in adjustments:
-            projection.pass_td *= adjustments['td_rate']
+            projection.pass_td = projection.pass_td * adjustments['td_rate']
+            if projection.pass_attempts > 0:
+                projection.pass_td_rate = projection.pass_td / projection.pass_attempts
             
         if 'int_rate' in adjustments:
-            projection.interceptions *= adjustments['int_rate']
+            projection.interceptions = projection.interceptions * adjustments['int_rate']
             
         if 'rush_share' in adjustments:
             factor = adjustments['rush_share']
-            projection.carries *= factor
-            projection.rush_yards *= factor
-            projection.rush_td *= factor
+            projection.carries = projection.carries * factor
+            projection.rush_yards = projection.rush_yards * factor
+            projection.rush_td = projection.rush_td * factor
 
     async def _adjust_rb_stats(
         self,
@@ -401,16 +533,23 @@ class ProjectionService:
         """Adjust RB-specific statistics."""
         if 'rush_share' in adjustments:
             factor = adjustments['rush_share']
-            projection.carries *= factor
-            projection.rush_yards *= factor
-            projection.rush_td *= factor
+            projection.carries = projection.carries * factor
+            projection.rush_yards = projection.rush_yards * factor
+            projection.rush_td = projection.rush_td * factor
+            if projection.carries > 0:
+                projection.yards_per_carry = projection.rush_yards / projection.carries
+                projection.rush_td_rate = projection.rush_td / projection.carries
             
         if 'target_share' in adjustments:
             factor = adjustments['target_share']
-            projection.targets *= factor
-            projection.receptions *= (factor * 0.95)  # Slight reduction in catch rate
-            projection.rec_yards *= factor
-            projection.rec_td *= factor
+            projection.targets = projection.targets * factor
+            projection.receptions = projection.receptions * (factor * 0.95)  # Slight reduction in catch rate
+            projection.rec_yards = projection.rec_yards * factor
+            projection.rec_td = projection.rec_td * factor
+            if projection.targets > 0:
+                projection.catch_pct = projection.receptions / projection.targets * 100
+                projection.yards_per_target = projection.rec_yards / projection.targets
+                projection.rec_td_rate = projection.rec_td / projection.targets
 
     async def _adjust_receiver_stats(
         self,
@@ -421,14 +560,18 @@ class ProjectionService:
         """Adjust WR/TE-specific statistics."""
         if 'target_share' in adjustments:
             factor = adjustments['target_share']
-            projection.targets *= factor
-            projection.receptions *= (factor * 0.95)
-            projection.rec_yards *= factor
-            projection.rec_td *= factor
+            projection.targets = projection.targets * factor
+            projection.receptions = projection.receptions * (factor * 0.95)
+            projection.rec_yards = projection.rec_yards * factor
+            projection.rec_td = projection.rec_td * factor
+            if projection.targets > 0:
+                projection.catch_pct = projection.receptions / projection.targets * 100
+                projection.yards_per_target = projection.rec_yards / projection.targets
+                projection.rec_td_rate = projection.rec_td / projection.targets
             
         if 'snap_share' in adjustments:
             factor = adjustments['snap_share']
-            projection.snap_share = min(1.0, projection.snap_share * factor)
+            projection.snap_share = min(1.0, (projection.snap_share or 0.0) * factor)
 
     async def _apply_team_adjustment(
         self,
@@ -441,28 +584,51 @@ class ProjectionService:
             # Adjust based on team-level changes
             if 'pass_volume' in adjustments and projection.player.position == 'QB':
                 factor = adjustments['pass_volume']
-                projection.pass_attempts *= factor
-                projection.completions *= factor
-                projection.pass_yards *= factor
+                projection.pass_attempts = projection.pass_attempts * factor
+                projection.completions = projection.completions * factor
+                projection.pass_yards = projection.pass_yards * factor
+                if projection.pass_attempts > 0:
+                    projection.yards_per_att = projection.pass_yards / projection.pass_attempts
+                
+            # Adjust receiver targets based on pass volume
+            if 'pass_volume' in adjustments and projection.player.position in ['WR', 'TE', 'RB']:
+                factor = adjustments['pass_volume']
+                if projection.targets is not None:
+                    projection.targets = projection.targets * factor
+                    projection.receptions = projection.receptions * factor
+                    projection.rec_yards = projection.rec_yards * factor
+                    if projection.targets > 0:
+                        projection.yards_per_target = projection.rec_yards / projection.targets
                 
             if 'rush_volume' in adjustments:
                 factor = adjustments['rush_volume']
                 if projection.carries is not None:
-                    projection.carries *= factor
-                    projection.rush_yards *= factor
+                    projection.carries = projection.carries * factor
+                    projection.rush_yards = projection.rush_yards * factor
+                    if projection.carries > 0:
+                        projection.yards_per_carry = projection.rush_yards / projection.carries
                     
             if 'scoring_rate' in adjustments:
                 factor = adjustments['scoring_rate']
                 if projection.pass_td is not None:
-                    projection.pass_td *= factor
+                    projection.pass_td = projection.pass_td * factor
+                    if projection.pass_attempts > 0:
+                        projection.pass_td_rate = projection.pass_td / projection.pass_attempts
                 if projection.rush_td is not None:
-                    projection.rush_td *= factor
+                    projection.rush_td = projection.rush_td * factor
+                    if projection.carries and projection.carries > 0:
+                        projection.rush_td_rate = projection.rush_td / projection.carries
                 if projection.rec_td is not None:
-                    projection.rec_td *= factor
+                    projection.rec_td = projection.rec_td * factor
+                    if projection.targets and projection.targets > 0:
+                        projection.rec_td_rate = projection.rec_td / projection.targets
                     
             # Recalculate fantasy points
             projection.half_ppr = projection.calculate_fantasy_points()
             projection.updated_at = datetime.utcnow()
+            
+            # Make sure changes are persisted
+            self.db.flush()
             
             return projection
             
@@ -480,6 +646,15 @@ class ProjectionService:
         projection.carries = stats_dict.get('rush_attempts', 0)
         projection.rush_yards = stats_dict.get('rush_yards', 0)
         projection.rush_td = stats_dict.get('rush_td', 0)
+        
+        # Calculate efficiency metrics
+        if projection.pass_attempts > 0:
+            projection.yards_per_att = projection.pass_yards / projection.pass_attempts
+            projection.comp_pct = projection.completions / projection.pass_attempts * 100
+            projection.pass_td_rate = projection.pass_td / projection.pass_attempts
+            
+        if projection.carries > 0:
+            projection.yards_per_carry = projection.rush_yards / projection.carries
 
     def _set_rb_stats(self, projection: Projection, stats_dict: Dict, team_stats: TeamStat) -> None:
         """Set RB-specific projection stats."""
@@ -490,7 +665,17 @@ class ProjectionService:
         projection.receptions = stats_dict.get('receptions', 0)
         projection.rec_yards = stats_dict.get('rec_yards', 0)
         projection.rec_td = stats_dict.get('rec_td', 0)
-
+        
+        # Calculate efficiency metrics
+        if projection.carries > 0:
+            projection.yards_per_carry = projection.rush_yards / projection.carries
+            projection.rush_td_rate = projection.rush_td / projection.carries
+            
+        if projection.targets > 0:
+            projection.catch_pct = projection.receptions / projection.targets * 100
+            projection.yards_per_target = projection.rec_yards / projection.targets
+            projection.rec_td_rate = projection.rec_td / projection.targets
+            
     def _set_receiver_stats(self, projection: Projection, stats_dict: Dict, team_stats: TeamStat) -> None:
         """Set WR/TE-specific projection stats."""
         projection.targets = stats_dict.get('targets', 0)
@@ -500,3 +685,12 @@ class ProjectionService:
         projection.carries = stats_dict.get('rush_attempts', 0)
         projection.rush_yards = stats_dict.get('rush_yards', 0)
         projection.rush_td = stats_dict.get('rush_td', 0)
+        
+        # Calculate efficiency metrics
+        if projection.targets > 0:
+            projection.catch_pct = projection.receptions / projection.targets * 100
+            projection.yards_per_target = projection.rec_yards / projection.targets
+            projection.rec_td_rate = projection.rec_td / projection.targets
+            
+        if projection.carries > 0:
+            projection.yards_per_carry = projection.rush_yards / projection.carries

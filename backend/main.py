@@ -4,7 +4,7 @@ from fastapi.openapi.utils import get_openapi
 from backend.api.routes import players_router, projections_router, overrides_router, scenarios_router
 from backend.api.routes.batch import router as batch_router
 from backend.database import Base, engine
-from backend.services import TeamStatsService
+from backend.services import TeamStatService
 import logging
 from pathlib import Path
 

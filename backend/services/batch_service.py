@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any, Tuple, Union
+from typing import Dict, List, Optional, Any, Tuple, Union, Callable
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc
 import logging
@@ -6,11 +6,12 @@ import uuid
 import csv
 import io
 import json
+import asyncio
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
-from backend.database.models import Player, Projection, BaseStat, Scenario, StatOverride
+from backend.database.models import Player, Projection, BaseStat, Scenario, StatOverride, ImportLog
 from backend.services.projection_service import ProjectionService
 from backend.services.rookie_projection_service import RookieProjectionService
 
@@ -23,6 +24,127 @@ class BatchService:
         self.db = db
         self.projection_service = ProjectionService(db)
         self.rookie_service = RookieProjectionService(db)
+        self.failure_threshold = 5  # Default threshold for circuit breaker pattern
+        
+    async def process_batch(
+        self, 
+        service: Any,
+        method_name: str,
+        items: List[Any],
+        batch_size: int = 5,
+        delay: float = 1.0,
+        **kwargs
+    ) -> Dict[Any, bool]:
+        """
+        Process a batch of items using a specified service method.
+        
+        Args:
+            service: Service instance to call methods on
+            method_name: Name of the method to call
+            items: List of items to process
+            batch_size: Size of concurrent batches
+            delay: Delay between batches in seconds
+            **kwargs: Additional arguments to pass to the method
+            
+        Returns:
+            Dictionary mapping items to success/failure results
+        """
+        results = {}
+        method = getattr(service, method_name)
+        consecutive_failures = 0
+        
+        # Process in batches
+        for i in range(0, len(items), batch_size):
+            batch = items[i:i+batch_size]
+            
+            # Check if circuit breaker is active
+            if consecutive_failures >= self.failure_threshold:
+                # Log circuit breaker activation
+                log_entry = ImportLog(
+                    operation=f"batch_process:{method_name}",
+                    status="failure",
+                    message=f"Circuit breaker activated after {consecutive_failures} consecutive failures",
+                    details={"failed_items": len(results), "total_items": len(items)}
+                )
+                self.db.add(log_entry)
+                try:
+                    self.db.commit()
+                except Exception as e:
+                    logger.error(f"Error committing circuit breaker log: {str(e)}")
+                    self.db.rollback()
+                
+                # Mark remaining items as failed
+                for item in items[i:]:
+                    results[item] = False
+                break
+            
+            # Process this batch concurrently
+            batch_tasks = []
+            for item in batch:
+                task = asyncio.create_task(self._safe_execute(method, item, **kwargs))
+                batch_tasks.append((item, task))
+            
+            # Wait for batch completion
+            batch_failures = 0
+            for item, task in batch_tasks:
+                try:
+                    success = await task
+                    results[item] = success
+                    if not success:
+                        batch_failures += 1
+                except Exception as e:
+                    results[item] = False
+                    batch_failures += 1
+                    # Log error
+                    try:
+                        log_entry = ImportLog(
+                            operation=f"batch_process:{method_name}",
+                            status="failure",
+                            message=f"Error processing item: {str(e)}",
+                            details={"item": str(item)}
+                        )
+                        self.db.add(log_entry)
+                    except Exception as log_error:
+                        logger.error(f"Error creating error log: {str(log_error)}")
+            
+            # Update consecutive failures counter
+            if batch_failures == len(batch):
+                consecutive_failures += 1
+            else:
+                consecutive_failures = 0
+            
+            # Commit logs
+            try:
+                self.db.commit()
+            except Exception as e:
+                logger.error(f"Error committing logs: {str(e)}")
+                self.db.rollback()
+            
+            # Add delay between batches (if not the last batch)
+            if i + batch_size < len(items):
+                await asyncio.sleep(delay)
+        
+        return results
+    
+    async def _safe_execute(self, method: Callable, item: Any, **kwargs) -> bool:
+        """
+        Safely execute a method with error handling.
+        
+        Args:
+            method: Method to call
+            item: Item to process
+            **kwargs: Additional arguments
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            result = await method(item, **kwargs)
+            return bool(result)
+        except Exception as e:
+            # Log exception but don't raise
+            logger.error(f"Error in batch processing: {str(e)}")
+            return False
         
     async def batch_create_projections(
         self, 

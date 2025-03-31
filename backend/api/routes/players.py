@@ -235,12 +235,13 @@ async def get_rookies(
     return query.all()
 
 @router.post("/rookies/import", response_model=Dict[str, Any])
-async def import_rookies_from_csv(
+async def import_rookies(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
     """
-    Import rookies from a CSV file.
+    Import rookies from a file (CSV, Excel, or JSON format).
+    Automatically detects file format based on extension.
     """
     try:
         # Save uploaded file to temp location
@@ -250,7 +251,7 @@ async def import_rookies_from_csv(
         
         # Process the file
         import_service = RookieImportService(db)
-        success_count, errors = await import_service.import_rookies_from_csv(temp_file)
+        success_count, errors = await import_service.import_rookies(temp_file)
         
         # Remove temp file
         os.remove(temp_file)
@@ -268,10 +269,10 @@ async def import_rookies_from_csv(
         }
         
     except Exception as e:
-        logger.error(f"Rookie CSV import error: {str(e)}")
+        logger.error(f"Rookie import error: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Error importing rookie CSV: {str(e)}"
+            detail=f"Error importing rookie file: {str(e)}"
         )
 
 @router.put("/{player_id}/status", response_model=PlayerResponse)
