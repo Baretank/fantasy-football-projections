@@ -1,6 +1,6 @@
 import pytest
 import uuid
-from backend.services.team_stat_service import TeamStatsService
+from backend.services.team_stat_service import TeamStatService
 from backend.database.models import TeamStat, Projection, Player
 
 class TestTeamStatService:
@@ -134,10 +134,10 @@ class TestTeamStatService:
         return projections
 
     @pytest.mark.asyncio
-    async def test_apply_team_adjustments(self, team_stats_service, sample_team_projections, test_db):
+    async def test_apply_team_adjustments(self, team_stats_service, sample_team_projections, team_stats_2024, sample_players, test_db):
         """Test applying team-level adjustments to player projections."""
         # Original KC team stats (from fixture)
-        orig_kc_stats = await team_stats_service.get_team_stats("KC", 2024)
+        orig_kc_stats = team_stats_2024
         
         # Create a modified team stat object with increased passing
         new_kc_stats = TeamStat(
@@ -163,7 +163,7 @@ class TestTeamStatService:
         )
         
         # Apply team adjustments to players
-        adjusted_projs = await team_stats_service.apply_team_adjustments(
+        adjusted_projs = await team_stats_service.apply_team_stats_directly(
             original_stats=orig_kc_stats,
             new_stats=new_kc_stats,
             players=sample_team_projections
@@ -203,10 +203,10 @@ class TestTeamStatService:
         assert te_proj.catch_pct == pytest.approx(0.7, rel=0.05)
 
     @pytest.mark.asyncio
-    async def test_calculate_team_adjustment_factors(self, team_stats_service):
+    async def test_calculate_team_adjustment_factors(self, team_stats_service, team_stats_2024):
         """Test calculation of team adjustment factors."""
         # Original KC team stats (from fixture)
-        orig_kc_stats = await team_stats_service.get_team_stats("KC", 2024)
+        orig_kc_stats = team_stats_2024
         
         # Create a new team stat with specific changes
         new_kc_stats = TeamStat(
@@ -270,10 +270,10 @@ class TestTeamStatService:
         assert factors["scoring_rate"] == pytest.approx(new_total_td / orig_total_td, rel=0.01)
 
     @pytest.mark.asyncio
-    async def test_get_team_adjustment_factors(self, team_stats_service, test_db):
+    async def test_get_team_adjustment_factors(self, team_stats_service, team_stats_2024, test_db):
         """Test calculating team adjustment factors from season to season."""
         # Get KC stats for 2024
-        kc_2024 = await team_stats_service.get_team_stats("KC", 2024)
+        kc_2024 = team_stats_2024
         
         # Create a 2023 team stat record with different values
         kc_2023 = TeamStat(

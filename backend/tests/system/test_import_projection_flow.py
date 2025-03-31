@@ -10,7 +10,7 @@ from datetime import datetime
 from backend.services.data_import_service import DataImportService
 from backend.services.projection_service import ProjectionService
 from backend.services.data_validation import DataValidationService
-from backend.services.team_stat_service import TeamStatsService
+from backend.services.team_stat_service import TeamStatService
 from backend.services.batch_service import BatchService
 from backend.database.models import Player, BaseStat, TeamStat, Projection
 
@@ -22,7 +22,7 @@ class TestImportProjectionFlow:
             "data_import": DataImportService(test_db),
             "projection": ProjectionService(test_db),
             "validation": DataValidationService(test_db),
-            "team_stat": TeamStatsService(test_db),
+            "team_stat": TeamStatService(test_db),
             "batch": BatchService(test_db)
         }
     

@@ -5,9 +5,10 @@ from sqlalchemy import and_
 
 from backend.services.projection_service import ProjectionService
 from backend.services.data_service import DataService
-from backend.services.team_stat_service import TeamStatsService
+from backend.services.team_stat_service import TeamStatService
 from backend.services.data_validation import DataValidationService
-from backend.database.models import Player, BaseStat, TeamStat, Projection, GameStats
+from backend.services.override_service import OverrideService
+from backend.database.models import Player, BaseStat, TeamStat, Projection, GameStats, StatOverride
 
 class TestProjectionPipeline:
     @pytest.fixture(scope="function")
@@ -22,13 +23,18 @@ class TestProjectionPipeline:
     
     @pytest.fixture(scope="function")
     def team_stat_service(self, test_db):
-        """Create TeamStatsService instance for testing."""
-        return TeamStatsService(test_db)
+        """Create TeamStatService instance for testing."""
+        return TeamStatService(test_db)
     
     @pytest.fixture(scope="function")
     def validation_service(self, test_db):
         """Create DataValidationService instance for testing."""
         return DataValidationService(test_db)
+        
+    @pytest.fixture(scope="function")
+    def override_service(self, test_db):
+        """Create OverrideService instance for testing."""
+        return OverrideService(test_db)
     
     @pytest.fixture(scope="function")
     def setup_test_data(self, test_db):
@@ -202,6 +208,10 @@ class TestProjectionPipeline:
                 season=season,
                 week=week,
                 opponent="OPP",
+                game_location="home",
+                result="W 30-7",  # Add required result
+                team_score=30,    # Add required scores
+                opponent_score=7,
                 stats={
                     "cmp": "22", 
                     "att": "34", 
@@ -795,3 +805,99 @@ class TestProjectionPipeline:
                 
                 # Fantasy points should increase
                 assert proj.half_ppr > base_proj.half_ppr
+    
+    @pytest.mark.asyncio
+    async def test_override_and_projection_integration(
+        self,
+        setup_test_data,
+        projection_service,
+        override_service
+    ):
+        """Test the integration of overrides with the projection pipeline."""
+        team = setup_test_data["teams"][0]  # First team (KC)
+        projection_season = setup_test_data["projection_season"]
+        
+        # Get all players for the team
+        team_players = [p for p in setup_test_data["players"] if p.team == team]
+        
+        # Step 1: Create base projections for all team players
+        projections = {}
+        for player in team_players:
+            projection = await projection_service.create_base_projection(player.player_id, projection_season)
+            assert projection is not None
+            projections[player.player_id] = projection
+        
+        # Step 2: Find a QB player to override
+        qb = next((p for p in team_players if p.position == 'QB'), None)
+        assert qb is not None
+        qb_proj = projections[qb.player_id]
+        
+        # Store original values for comparison
+        original_pass_attempts = qb_proj.pass_attempts 
+        original_pass_yards = qb_proj.pass_yards
+        original_fantasy_points = qb_proj.half_ppr
+        
+        # Step 3: Create an override to increase pass attempts by 20%
+        new_pass_attempts = original_pass_attempts * 1.2
+        
+        override = await override_service.create_override(
+            player_id=qb.player_id,
+            projection_id=qb_proj.projection_id,
+            stat_name="pass_attempts",
+            manual_value=new_pass_attempts,
+            notes="Testing override integration"
+        )
+        
+        assert override is not None
+        assert override.manual_value == new_pass_attempts
+        
+        # Step 4: Verify the override was applied and dependent stats recalculated
+        updated_qb_proj = await projection_service.get_projection(qb_proj.projection_id)
+        assert updated_qb_proj is not None
+        
+        # Pass attempts should match our override
+        assert updated_qb_proj.pass_attempts == new_pass_attempts
+        
+        # Verify the yards per attempt has been recalculated (should be lower with more attempts)
+        original_yards_per_att = original_pass_yards / original_pass_attempts if original_pass_attempts > 0 else 0
+        new_yards_per_att = updated_qb_proj.pass_yards / new_pass_attempts if new_pass_attempts > 0 else 0
+        
+        assert new_yards_per_att < original_yards_per_att  # Should decrease with more attempts
+        
+        # Step 5: Apply another override to a RB and test compound effects
+        rb = next((p for p in team_players if p.position == 'RB' and 'RB1' in p.name), None)
+        if not rb:
+            rb = next((p for p in team_players if p.position == 'RB'), None)  # Any RB if no RB1
+            
+        assert rb is not None
+        rb_proj = projections[rb.player_id]
+        
+        # Store original rushing TD value
+        original_rush_td = rb_proj.rush_td
+        original_rb_fantasy_points = rb_proj.half_ppr
+        
+        # Create override to increase rush TDs by 50%
+        new_rush_td = original_rush_td * 1.5
+        
+        override_rb = await override_service.create_override(
+            player_id=rb.player_id,
+            projection_id=rb_proj.projection_id,
+            stat_name="rush_td",
+            manual_value=new_rush_td,
+            notes="Testing TD override"
+        )
+        
+        assert override_rb is not None
+        
+        # Verify fantasy points increased
+        rb_proj_after = await projection_service.get_projection(rb_proj.projection_id)
+        assert rb_proj_after.half_ppr > original_rb_fantasy_points
+        
+        # Step 6: Test override removal and restoration of calculated values
+        # Delete the QB override
+        delete_result = await override_service.delete_override(override.override_id)
+        assert delete_result is True
+        
+        # Verify stats were restored to pre-override values
+        restored_qb_proj = await projection_service.get_projection(qb_proj.projection_id)
+        assert abs(restored_qb_proj.pass_attempts - original_pass_attempts) < 0.01
