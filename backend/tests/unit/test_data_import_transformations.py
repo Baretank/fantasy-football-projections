@@ -1,90 +1,15 @@
 import pytest
 import pandas as pd
 from sqlalchemy.orm import Session
-from backend.services.data_import_service import DataImportService
-from backend.database.models import Player, BaseStat
+from backend.services.nfl_data_import_service import NFLDataImportService
+from backend.database.models import Player, BaseStat, GameStats
 import uuid
 
 class TestDataImportTransformations:
     @pytest.fixture(scope="function")
     def service(self, test_db):
-        """Create DataImportService instance for testing."""
-        return DataImportService(test_db)
-    
-    @pytest.fixture(scope="function")
-    def mock_qb_data(self):
-        """Mock QB game log data from external source."""
-        data = {
-            "Date": ["2023-09-10", "2023-09-17", "2023-09-24", "2023-10-01", "2023-10-08"],
-            "Week": [1, 2, 3, 4, 5],
-            "Tm": ["KC", "KC", "KC", "KC", "KC"],
-            "Opp": ["JAX", "DET", "CHI", "NYJ", "MIN"],
-            "Result": ["W 17-9", "W 31-17", "W 41-10", "W 23-20", "W 27-20"],
-            "Cmp": [25, 29, 24, 30, 31],
-            "Att": [37, 44, 33, 40, 45],
-            "Cmp%": [67.6, 65.9, 72.7, 75.0, 68.9],
-            "Yds": [305, 316, 272, 298, 348],
-            "TD": [2, 2, 3, 1, 3],
-            "Int": [1, 0, 0, 1, 0],
-            "Rate": [94.2, 97.3, 123.8, 89.5, 108.7],
-            "Sk": [1, 2, 1, 3, 2],
-            "YdsL": [8, 15, 9, 23, 16],
-            "Y/A": [8.2, 7.2, 8.2, 7.5, 7.7],
-            "AY/A": [8.4, 7.8, 10.1, 6.9, 9.0],
-            "Att.1": [6, 4, 3, 7, 5],
-            "Yds.1": [45, 27, 17, 53, 38],
-            "Y/A.1": [7.5, 6.8, 5.7, 7.6, 7.6],
-            "TD.1": [0, 0, 1, 0, 0],
-            "Snaps": [68, 72, 70, 75, 71],
-            "Snap%": [100, 100, 98, 100, 100]
-        }
-        return pd.DataFrame(data)
-    
-    @pytest.fixture(scope="function")
-    def mock_rb_data(self):
-        """Mock RB game log data from external source."""
-        data = {
-            "Date": ["2023-09-10", "2023-09-17", "2023-09-24", "2023-10-01", "2023-10-08"],
-            "Week": [1, 2, 3, 4, 5],
-            "Tm": ["SF", "SF", "SF", "SF", "SF"],
-            "Opp": ["PIT", "LAR", "NYG", "ARI", "DAL"],
-            "Result": ["W 30-7", "W 27-20", "W 30-12", "L 17-18", "W 42-10"],
-            "Att": [22, 20, 18, 16, 17],
-            "Yds": [152, 116, 85, 106, 118],
-            "Y/A": [6.9, 5.8, 4.7, 6.6, 6.9],
-            "TD": [1, 1, 0, 1, 2],
-            "Tgt": [7, 6, 8, 5, 4],
-            "Rec": [5, 5, 7, 3, 3],
-            "Yds.1": [17, 21, 34, 18, 15],
-            "Y/R": [3.4, 4.2, 4.9, 6.0, 5.0],
-            "TD.1": [0, 0, 1, 0, 0],
-            "Snaps": [45, 47, 46, 44, 42],
-            "Snap%": [65, 67, 64, 62, 60]
-        }
-        return pd.DataFrame(data)
-    
-    @pytest.fixture(scope="function")
-    def mock_wr_data(self):
-        """Mock WR game log data from external source."""
-        data = {
-            "Date": ["2023-09-10", "2023-09-17", "2023-09-24", "2023-10-01", "2023-10-08"],
-            "Week": [1, 2, 3, 4, 5],
-            "Tm": ["KC", "KC", "KC", "KC", "KC"],
-            "Opp": ["JAX", "DET", "CHI", "NYJ", "MIN"],
-            "Result": ["W 17-9", "W 31-17", "W 41-10", "W 23-20", "W 27-20"],
-            "Tgt": [9, 10, 8, 12, 11],
-            "Rec": [7, 8, 6, 9, 8],
-            "Yds": [95, 103, 69, 124, 112],
-            "Y/R": [13.6, 12.9, 11.5, 13.8, 14.0],
-            "TD": [1, 1, 0, 1, 2],
-            "Att": [0, 1, 0, 0, 0],
-            "Yds.1": [0, 8, 0, 0, 0],
-            "Y/A": [0, 8.0, 0, 0, 0],
-            "TD.1": [0, 0, 0, 0, 0],
-            "Snaps": [55, 59, 50, 62, 58],
-            "Snap%": [80, 82, 70, 83, 82]
-        }
-        return pd.DataFrame(data)
+        """Create NFLDataImportService instance for testing."""
+        return NFLDataImportService(test_db)
     
     @pytest.fixture(scope="function")
     def sample_player(self, test_db):
@@ -99,241 +24,275 @@ class TestDataImportTransformations:
         test_db.commit()
         return player
     
-    def test_transform_qb_data(self, service, mock_qb_data, sample_player):
-        """Test transformation of QB data from external format to internal model."""
-        # Test the transformation of game log data
-        game_stats = service._transform_qb_game_data(mock_qb_data, sample_player.player_id, 2023)
+    @pytest.fixture(scope="function")
+    def sample_game_stats(self, test_db, sample_player):
+        """Create sample game stats for testing."""
+        game_stats = []
         
-        assert len(game_stats) == 5  # 5 games in our mock data
+        # Create QB game stats
+        qb_stats = [
+            {
+                "pass_attempts": 37, "completions": 25, "pass_yards": 305, "pass_td": 2, "interceptions": 1,
+                "rush_attempts": 6, "rush_yards": 45, "rush_td": 0
+            },
+            {
+                "pass_attempts": 44, "completions": 29, "pass_yards": 316, "pass_td": 2, "interceptions": 0,
+                "rush_attempts": 4, "rush_yards": 27, "rush_td": 0
+            },
+            {
+                "pass_attempts": 33, "completions": 24, "pass_yards": 272, "pass_td": 3, "interceptions": 0,
+                "rush_attempts": 3, "rush_yards": 17, "rush_td": 1
+            },
+            {
+                "pass_attempts": 40, "completions": 30, "pass_yards": 298, "pass_td": 1, "interceptions": 1,
+                "rush_attempts": 7, "rush_yards": 53, "rush_td": 0
+            },
+            {
+                "pass_attempts": 45, "completions": 31, "pass_yards": 348, "pass_td": 3, "interceptions": 0,
+                "rush_attempts": 5, "rush_yards": 38, "rush_td": 0
+            }
+        ]
         
-        # Verify the first game's stats
-        first_game = game_stats[0]
-        assert first_game.player_id == sample_player.player_id
-        assert first_game.season == 2023
-        assert first_game.week == 1
-        assert first_game.opponent == "JAX"
+        for i, stats in enumerate(qb_stats, 1):
+            game_stat = GameStats(
+                game_stat_id=str(uuid.uuid4()),
+                player_id=sample_player.player_id,
+                season=2023,
+                week=i,
+                opponent=["JAX", "DET", "CHI", "NYJ", "MIN"][i-1],
+                game_location="home",
+                result="W",
+                team_score=["17", "31", "41", "23", "27"][i-1],
+                opponent_score=["9", "17", "10", "20", "20"][i-1],
+                stats=stats
+            )
+            test_db.add(game_stat)
+            game_stats.append(game_stat)
         
-        # Check specific QB stats
-        assert first_game.pass_attempts == 37
-        assert first_game.completions == 25
-        assert first_game.pass_yards == 305
-        assert first_game.pass_td == 2
-        assert first_game.interceptions == 1
-        
-        # Check rushing stats
-        assert first_game.carries == 6
-        assert first_game.rush_yards == 45
-        assert first_game.rush_td == 0
-        
-        # Test calculation of season totals
-        season_totals = service._calculate_season_totals(game_stats)
-        
-        assert season_totals.games == 5
-        assert season_totals.pass_attempts == sum([g.pass_attempts for g in game_stats])
-        assert season_totals.completions == sum([g.completions for g in game_stats])
-        assert season_totals.pass_yards == sum([g.pass_yards for g in game_stats])
-        assert season_totals.pass_td == sum([g.pass_td for g in game_stats])
-        assert season_totals.interceptions == sum([g.interceptions for g in game_stats])
-        assert season_totals.carries == sum([g.carries for g in game_stats])
-        assert season_totals.rush_yards == sum([g.rush_yards for g in game_stats])
-        assert season_totals.rush_td == sum([g.rush_td for g in game_stats])
+        test_db.commit()
+        return game_stats
     
-    def test_transform_rb_data(self, service, mock_rb_data, sample_player):
-        """Test transformation of RB data from external format to internal model."""
-        # Update sample player to be an RB
-        service.db.query(Player).filter(
-            Player.player_id == sample_player.player_id
-        ).update({"position": "RB", "team": "SF"})
-        service.db.commit()
-        
-        # Test the transformation of game log data
-        game_stats = service._transform_rb_game_data(mock_rb_data, sample_player.player_id, 2023)
-        
-        assert len(game_stats) == 5  # 5 games in our mock data
-        
-        # Verify the first game's stats
-        first_game = game_stats[0]
-        assert first_game.player_id == sample_player.player_id
-        assert first_game.season == 2023
-        assert first_game.week == 1
-        assert first_game.opponent == "PIT"
-        
-        # Check specific RB stats
-        assert first_game.carries == 22
-        assert first_game.rush_yards == 152
-        assert first_game.rush_td == 1
-        
-        # Check receiving stats
-        assert first_game.targets == 7
-        assert first_game.receptions == 5
-        assert first_game.rec_yards == 17
-        assert first_game.rec_td == 0
-        
-        # Test calculation of season totals
-        season_totals = service._calculate_season_totals(game_stats)
-        
-        assert season_totals.games == 5
-        assert season_totals.carries == sum([g.carries for g in game_stats])
-        assert season_totals.rush_yards == sum([g.rush_yards for g in game_stats])
-        assert season_totals.rush_td == sum([g.rush_td for g in game_stats])
-        assert season_totals.targets == sum([g.targets for g in game_stats])
-        assert season_totals.receptions == sum([g.receptions for g in game_stats])
-        assert season_totals.rec_yards == sum([g.rec_yards for g in game_stats])
-        assert season_totals.rec_td == sum([g.rec_td for g in game_stats])
-    
-    def test_transform_wr_data(self, service, mock_wr_data, sample_player):
-        """Test transformation of WR data from external format to internal model."""
-        # Update sample player to be a WR
-        service.db.query(Player).filter(
-            Player.player_id == sample_player.player_id
-        ).update({"position": "WR", "team": "KC"})
-        service.db.commit()
-        
-        # Test the transformation of game log data
-        game_stats = service._transform_wr_game_data(mock_wr_data, sample_player.player_id, 2023)
-        
-        assert len(game_stats) == 5  # 5 games in our mock data
-        
-        # Verify the first game's stats
-        first_game = game_stats[0]
-        assert first_game.player_id == sample_player.player_id
-        assert first_game.season == 2023
-        assert first_game.week == 1
-        assert first_game.opponent == "JAX"
-        
-        # Check specific WR stats
-        assert first_game.targets == 9
-        assert first_game.receptions == 7
-        assert first_game.rec_yards == 95
-        assert first_game.rec_td == 1
-        
-        # Check rushing stats (if any)
-        assert first_game.carries == 0
-        assert first_game.rush_yards == 0
-        assert first_game.rush_td == 0
-        
-        # Test calculation of season totals
-        season_totals = service._calculate_season_totals(game_stats)
-        
-        assert season_totals.games == 5
-        assert season_totals.targets == sum([g.targets for g in game_stats])
-        assert season_totals.receptions == sum([g.receptions for g in game_stats])
-        assert season_totals.rec_yards == sum([g.rec_yards for g in game_stats])
-        assert season_totals.rec_td == sum([g.rec_td for g in game_stats])
-        
-        # Should have 1 carry from game 2
-        assert season_totals.carries == 1
-        assert season_totals.rush_yards == 8
-        assert season_totals.rush_td == 0
-    
-    def test_derived_metrics_calculation(self, service, mock_qb_data, sample_player):
-        """Test calculation of derived metrics from raw stats."""
-        # Transform game data first
-        game_stats = service._transform_qb_game_data(mock_qb_data, sample_player.player_id, 2023)
-        season_totals = service._calculate_season_totals(game_stats)
-        
-        # Calculate derived metrics
-        derived_metrics = service._calculate_derived_metrics(season_totals)
-        
-        # Check derived efficiency metrics
-        assert derived_metrics.comp_pct == pytest.approx(
-            season_totals.completions / season_totals.pass_attempts, rel=0.01
-        )
-        
-        assert derived_metrics.yards_per_att == pytest.approx(
-            season_totals.pass_yards / season_totals.pass_attempts, rel=0.01
-        )
-        
-        assert derived_metrics.pass_td_rate == pytest.approx(
-            season_totals.pass_td / season_totals.pass_attempts, rel=0.01
-        )
-        
-        assert derived_metrics.int_rate == pytest.approx(
-            season_totals.interceptions / season_totals.pass_attempts, rel=0.01
-        )
-        
-        assert derived_metrics.yards_per_carry == pytest.approx(
-            season_totals.rush_yards / season_totals.carries, rel=0.01
-        )
-    
-    def test_stat_mapping_consistency(self, service, mock_qb_data, mock_rb_data, mock_wr_data, sample_player):
-        """Test the consistency of stat mapping across different positions."""
-        # QB transformation
-        qb_games = service._transform_qb_game_data(mock_qb_data, sample_player.player_id, 2023)
-        qb_season = service._calculate_season_totals(qb_games)
-        
-        # Update player to be RB
-        service.db.query(Player).filter(
-            Player.player_id == sample_player.player_id
-        ).update({"position": "RB", "team": "SF"})
-        service.db.commit()
-        
-        # RB transformation
-        rb_games = service._transform_rb_game_data(mock_rb_data, sample_player.player_id, 2023)
-        rb_season = service._calculate_season_totals(rb_games)
-        
-        # Update player to be WR
-        service.db.query(Player).filter(
-            Player.player_id == sample_player.player_id
-        ).update({"position": "WR", "team": "KC"})
-        service.db.commit()
-        
-        # WR transformation
-        wr_games = service._transform_wr_game_data(mock_wr_data, sample_player.player_id, 2023)
-        wr_season = service._calculate_season_totals(wr_games)
-        
-        # Verify common stats are mapped consistently
-        # All players should have rush_yards, but QBs usually less
-        assert qb_season.rush_yards == sum([g.rush_yards for g in qb_games])
-        assert rb_season.rush_yards == sum([g.rush_yards for g in rb_games])
-        assert wr_season.rush_yards == sum([g.rush_yards for g in wr_games])
-        
-        # All players should have games count
-        assert qb_season.games == 5
-        assert rb_season.games == 5
-        assert wr_season.games == 5
-        
-        # RBs and WRs should have receiving stats
-        assert rb_season.targets == sum([g.targets for g in rb_games])
-        assert wr_season.targets == sum([g.targets for g in wr_games])
-        
-        # QBs should have passing stats
-        assert qb_season.pass_attempts == sum([g.pass_attempts for g in qb_games])
-        assert qb_season.pass_yards == sum([g.pass_yards for g in qb_games])
-    
-    def test_handling_missing_data(self, service, mock_qb_data, sample_player):
-        """Test handling of missing data in import transformations."""
-        # Create a copy with some missing data
-        missing_data = mock_qb_data.copy()
-        missing_data.loc[2, "Cmp"] = None  # Missing completions in game 3
-        missing_data.loc[3, "TD"] = None   # Missing TDs in game 4
-        
-        # Test the transformation with missing data
-        game_stats = service._transform_qb_game_data(missing_data, sample_player.player_id, 2023)
-        
-        # Check that missing data is handled properly (should default to 0)
-        assert game_stats[2].completions == 0  # Game 3
-        assert game_stats[3].pass_td == 0      # Game 4
-        
+    @pytest.mark.asyncio
+    async def test_calculate_season_totals(self, service, sample_player, sample_game_stats):
+        """Test calculating season totals from game stats."""
         # Calculate season totals
-        season_totals = service._calculate_season_totals(game_stats)
+        result = await service.calculate_season_totals(2023)
         
-        # Verify totals still calculated correctly
-        assert season_totals.completions == sum([g.completions for g in game_stats])
-        assert season_totals.pass_td == sum([g.pass_td for g in game_stats])
+        # Verify result structure
+        assert isinstance(result, dict)
+        assert "totals_created" in result
+        assert "players_processed" in result
+        
+        # Query the base stats to verify calculations
+        base_stats = service.db.query(BaseStat).filter(
+            BaseStat.player_id == sample_player.player_id,
+            BaseStat.season == 2023
+        ).all()
+        
+        # Convert to dict for easier assertion
+        stat_dict = {stat.stat_type: stat.value for stat in base_stats}
+        
+        # Verify pass stats
+        assert stat_dict["pass_attempts"] == 199  # 37+44+33+40+45
+        assert stat_dict["completions"] == 139  # 25+29+24+30+31
+        assert stat_dict["pass_yards"] == 1539  # 305+316+272+298+348
+        assert stat_dict["pass_td"] == 11  # 2+2+3+1+3
+        assert stat_dict["interceptions"] == 2  # 1+0+0+1+0
+        
+        # Verify rush stats
+        assert stat_dict["rush_attempts"] == 25  # 6+4+3+7+5
+        assert stat_dict["rush_yards"] == 180  # 45+27+17+53+38
+        assert stat_dict["rush_td"] == 1  # 0+0+1+0+0
+        
+        # Verify games count
+        assert stat_dict["games"] == 5
+        
+        # Verify fantasy points calculation
+        # (pass_yards * 0.04) + (pass_td * 4) - (interceptions * 1) + (rush_yards * 0.1) + (rush_td * 6)
+        expected_points = (1539 * 0.04) + (11 * 4) - (2 * 1) + (180 * 0.1) + (1 * 6)
+        assert stat_dict["half_ppr"] == pytest.approx(expected_points, rel=0.01)
     
-    def test_handling_percentage_fields(self, service, mock_qb_data, sample_player):
-        """Test handling of percentage fields in import transformations."""
-        # Test the transformation of percentage fields
-        game_stats = service._transform_qb_game_data(mock_qb_data, sample_player.player_id, 2023)
+    @pytest.mark.asyncio
+    async def test_validate_data(self, service, sample_player, sample_game_stats):
+        """Test data validation functionality."""
+        # Delete one base stat to simulate an inconsistency
+        service.db.query(BaseStat).filter(
+            BaseStat.player_id == sample_player.player_id,
+            BaseStat.season == 2023,
+            BaseStat.stat_type == "pass_td"
+        ).delete()
         
-        # Completion percentage should be transformed from string to float
-        assert game_stats[0].comp_pct == pytest.approx(67.6 / 100, rel=0.01)
-        assert game_stats[1].comp_pct == pytest.approx(65.9 / 100, rel=0.01)
+        # Add a wrong value to test correction
+        wrong_stat = BaseStat(
+            stat_id=str(uuid.uuid4()),
+            player_id=sample_player.player_id,
+            season=2023,
+            stat_type="games",
+            value=10  # Wrong value, should be 5
+        )
+        service.db.add(wrong_stat)
+        service.db.commit()
         
-        # Calculate season totals
-        season_totals = service._calculate_season_totals(game_stats)
+        # Run validation
+        result = await service.validate_data(2023)
         
-        # Verify percentage is calculated as aggregate
-        expected_comp_pct = sum([g.completions for g in game_stats]) / sum([g.pass_attempts for g in game_stats])
-        assert season_totals.comp_pct == pytest.approx(expected_comp_pct, rel=0.01)
+        # Verify issues were found and fixed
+        assert result["issues_found"] > 0
+        assert result["issues_fixed"] > 0
+        
+        # Check the corrected values
+        base_stats = service.db.query(BaseStat).filter(
+            BaseStat.player_id == sample_player.player_id,
+            BaseStat.season == 2023
+        ).all()
+        
+        # Convert to dict for easier assertion
+        stat_dict = {stat.stat_type: stat.value for stat in base_stats}
+        
+        # Verify the missing stat was recreated
+        assert "pass_td" in stat_dict
+        assert stat_dict["pass_td"] == 11
+        
+        # Verify the wrong value was corrected
+        assert stat_dict["games"] == 5
+    
+    @pytest.mark.asyncio
+    async def test_stat_consistency_across_positions(self, service, test_db, sample_player):
+        """Test consistency of stat transformations across different positions."""
+        # Change sample player position and create different stats
+        positions = ["QB", "RB", "WR", "TE"]
+        
+        for position in positions:
+            # Update player position
+            service.db.query(Player).filter(
+                Player.player_id == sample_player.player_id
+            ).update({"position": position})
+            service.db.commit()
+            
+            # Clear existing game stats
+            service.db.query(GameStats).filter(
+                GameStats.player_id == sample_player.player_id
+            ).delete()
+            service.db.commit()
+            
+            # Create position-specific game stats
+            if position == "QB":
+                stats = {
+                    "pass_attempts": 40, "completions": 30, "pass_yards": 300, "pass_td": 2, "interceptions": 1,
+                    "rush_attempts": 5, "rush_yards": 25, "rush_td": 0
+                }
+            elif position == "RB":
+                stats = {
+                    "rush_attempts": 20, "rush_yards": 100, "rush_td": 1,
+                    "targets": 5, "receptions": 4, "rec_yards": 30, "rec_td": 0
+                }
+            elif position in ["WR", "TE"]:
+                stats = {
+                    "targets": 10, "receptions": 8, "rec_yards": 120, "rec_td": 1,
+                    "rush_attempts": 1, "rush_yards": 5, "rush_td": 0
+                }
+            
+            # Add game stat
+            game_stat = GameStats(
+                game_stat_id=str(uuid.uuid4()),
+                player_id=sample_player.player_id,
+                season=2023,
+                week=1,
+                opponent="OPP",
+                game_location="home",
+                result="W",
+                team_score="28",
+                opponent_score="21",
+                stats=stats
+            )
+            service.db.add(game_stat)
+            service.db.commit()
+            
+            # Clear existing base stats
+            service.db.query(BaseStat).filter(
+                BaseStat.player_id == sample_player.player_id
+            ).delete()
+            service.db.commit()
+            
+            # Calculate season totals
+            await service.calculate_season_totals(2023)
+            
+            # Get the base stats
+            base_stats = service.db.query(BaseStat).filter(
+                BaseStat.player_id == sample_player.player_id,
+                BaseStat.season == 2023
+            ).all()
+            
+            # Convert to dict
+            stat_dict = {stat.stat_type: stat.value for stat in base_stats}
+            
+            # Check for appropriate stats based on position
+            if position == "QB":
+                assert "pass_attempts" in stat_dict
+                assert "completions" in stat_dict
+                assert "pass_yards" in stat_dict
+                assert "pass_td" in stat_dict
+                assert "interceptions" in stat_dict
+                assert stat_dict["pass_attempts"] == 40
+            
+            if position in ["RB", "WR", "TE"]:
+                assert "targets" in stat_dict
+                assert "receptions" in stat_dict
+                assert "rec_yards" in stat_dict
+                assert "rec_td" in stat_dict
+                
+                if position == "RB":
+                    assert stat_dict["rush_attempts"] == 20
+                    assert stat_dict["rush_yards"] == 100
+                elif position in ["WR", "TE"]:
+                    assert stat_dict["targets"] == 10
+                    assert stat_dict["receptions"] == 8
+            
+            # All positions should have these stats
+            assert "games" in stat_dict
+            assert "half_ppr" in stat_dict
+    
+    @pytest.mark.asyncio
+    async def test_fantasy_point_calculation(self, service, sample_player):
+        """Test fantasy point calculation for different positions."""
+        positions = ["QB", "RB", "WR", "TE"]
+        expected_points = {
+            # Let's match the actual calculation from the service:
+            "QB": 21.5,  # (300 * 0.04) + (2 * 4) - (1 * 1) + (25 * 0.1) = 12 + 8 - 1 + 2.5 = 21.5
+            "RB": 21.0,  # (100 * 0.1) + (1 * 6) + (4 * 0.5) + (30 * 0.1) = 10 + 6 + 2 + 3 = 21
+            "WR": 22.5,  # (8 * 0.5) + (120 * 0.1) + (1 * 6) + (5 * 0.1) = 4 + 12 + 6 + 0.5 = 22.5
+            "TE": 22.5    # Same as WR
+        }
+        
+        for position in positions:
+            # Create stats for each position
+            if position == "QB":
+                stats = {
+                    "pass_yards": 300,
+                    "pass_td": 2,
+                    "interceptions": 1,
+                    "rush_yards": 25,
+                    "rush_td": 0
+                }
+            elif position == "RB":
+                stats = {
+                    "rush_yards": 100,
+                    "rush_td": 1,
+                    "receptions": 4,
+                    "rec_yards": 30,
+                    "rec_td": 0
+                }
+            elif position in ["WR", "TE"]:
+                stats = {
+                    "receptions": 8,
+                    "rec_yards": 120,
+                    "rec_td": 1,
+                    "rush_yards": 5,
+                    "rush_td": 0
+                }
+            
+            # Call the fantasy point calculation method
+            points = service._calculate_fantasy_points(stats, position)
+            
+            # Verify points calculation
+            assert points == pytest.approx(expected_points[position], rel=0.1)

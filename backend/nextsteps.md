@@ -32,6 +32,11 @@
 - [x] Implement end-to-end tests for critical user flows
 - [x] Add comprehensive tests for the override service
 - [x] Add integration tests for override-projection interaction
+- [x] Implement NFL data import testing framework
+- [x] Refactor tests to use new NFLDataImportService API
+- [x] Add comprehensive mocking for external data sources
+- [x] Improve async test patterns with proper AsyncMock usage
+- [x] Add detailed debugging output to stabilize tests
 - [ ] Complete API route tests with schema validation fixes
 - [ ] Set up automated test runs in CI/CD pipeline
 
@@ -67,41 +72,39 @@
 
 ## Phase 3 
 
-### Essential Unit Testing
-- [x] Test ProjectionService adjustment factors and projection creation/updates
+### NFL Data Integration Testing
+- [x] Test integration with NFL data sources (nfl-data-py and NFL API)
+- [x] Test NFLDataImportService with mocked adapters
+- [x] Test WebDataAdapter for handling HTML, JSON, and CSV responses
+- [x] Test rate limiting and circuit breaker pattern implementation
+- [x] Create comprehensive mock data for testing without external dependencies
+
+### Position-Specific Import Accuracy
+- [x] Test QB stats import accuracy (passing metrics, fantasy points)
+- [x] Test RB stats import accuracy (rushing, receiving, fantasy points)
+- [x] Test WR/TE stats import accuracy (receiving metrics, fantasy points)
+- [x] Test fantasy point calculation for half-PPR scoring
+
+### Import-to-Projection Pipeline
+- [x] Test the complete flow from NFL data import to projections
+- [x] Test weekly stats aggregation to season totals
+- [x] Test generation of future season projections
+- [x] Test application of position-specific adjustments
+- [x] Test application of team-level adjustments
+
+### Core Service Testing
+- [x] Test ProjectionService adjustment factors and projection creation
 - [x] Test OverrideService manual overrides and dependent stat recalculation
 - [x] Test TeamStatService team-level adjustments
-- [x] Test ScenarioService scenario creation and cloning
+- [x] Test ScenarioService scenario creation and application
+- [x] Test RookieProjectionService template application
 
-### Data Import Testing
-- [x] Test player list retrieval from external sources
-- [x] Test parsing of statistical data
-- [x] Test data transformations
-- [x] Test rate limiting and backoff mechanisms
-- [x] Create mock responses for external data sources
+### Data Validation and Error Handling
+- [x] Test data validation during import process
+- [x] Test data consistency checks with validation service
 - [x] Test handling of various response formats
-- [x] Test error handling for network issues
-
-### Integration Testing
-- [x] Test Import-to-Projection Pipeline
-- [x] Test batch processing functionality
-- [x] Test circuit breaker pattern for rate limiting
-- [x] Test request concurrency management
-
-### Position-Specific Import Testing
-- [x] Test QB stats import accuracy (passing metrics)
-- [x] Test RB stats import accuracy (rushing and receiving)
-- [x] Test WR/TE stats import accuracy (receiving metrics)
-
-### Import Data Transformation
-- [x] Test conversion from external format to internal models
-- [x] Test stat mapping for different positions
-- [x] Test calculation of derived metrics
-
-### Batch Import Behavior
-- [x] Test importing a full position group
-- [x] Test batch size and delay parameters
-- [x] Test interruption and recovery during batch import
+- [x] Test error handling for network issues and malformed data
+- [x] Test automatic correction of inconsistent data
 
 
 ## Phase 4: Enhanced Player Data Management 
@@ -126,7 +129,35 @@
 - [x] Add validation for the enhanced player attributes
 - [x] Create comprehensive test coverage for the player import functionality
 
-## Phase 5: Production Deployment
+## Phase 5: NFL Data Integration
+
+### NFL Data Import System
+- [x] Implement adapters for multiple NFL data sources
+  - [x] Create NFLDataPyAdapter for nfl-data-py package integration
+  - [x] Create NFLApiAdapter for direct NFL API access
+  - [x] Create WebDataAdapter for testing and fallback options
+- [x] Build a robust NFLDataImportService
+  - [x] Support player data import from NFL sources
+  - [x] Support weekly stats import and aggregation
+  - [x] Support team stats import and processing
+  - [x] Implement validation and data consistency checks
+- [x] Create comprehensive test suite for NFL data integration
+
+### Testing Infrastructure
+- [x] Refactor tests to work with new NFL data import system
+  - [x] Update unit tests for data transformations and validations
+  - [x] Update integration tests for NFL data pipeline
+  - [x] Update system tests for end-to-end flows
+- [x] Implement mock framework for NFL data sources
+  - [x] Support HTML, JSON, and CSV response mocking
+  - [x] Create realistic test data fixtures
+  - [x] Support rate limiting and error simulation
+- [x] Create test utilities for common testing patterns
+  - [x] Create AsyncMock utilities for testing async code
+  - [x] Implement database fixtures for testing
+  - [x] Support test isolation and cleanup
+
+## Phase 6: Production Deployment
 
 ### Containerization
 - [ ] Create Docker configuration for the backend

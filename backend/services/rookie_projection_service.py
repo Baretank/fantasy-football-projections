@@ -340,7 +340,7 @@ class RookieProjectionService:
                 projection.pass_yards = projected_stats.get("pass_yards", 0)
                 projection.pass_td = projected_stats.get("pass_td", 0)
                 projection.interceptions = projected_stats.get("interceptions", 0)
-                projection.carries = projected_stats.get("rush_attempts", 0)
+                projection.rush_attempts = projected_stats.get("rush_attempts", 0)
                 projection.rush_yards = projected_stats.get("rush_yards", 0)
                 projection.rush_td = projected_stats.get("rush_td", 0)
                 
@@ -351,11 +351,11 @@ class RookieProjectionService:
                     projection.pass_td_rate = projection.pass_td / projection.pass_attempts
                     projection.int_rate = projection.interceptions / projection.pass_attempts
                     
-                if projection.carries > 0:
-                    projection.yards_per_carry = projection.rush_yards / projection.carries
+                if projection.rush_attempts > 0:
+                    projection.yards_per_carry = projection.rush_yards / projection.rush_attempts
                     
             elif player.position in ["RB", "WR", "TE"]:
-                projection.carries = projected_stats.get("carries", 0) or projected_stats.get("rush_attempts", 0)
+                projection.rush_attempts = projected_stats.get("rush_attempts", 0) or projected_stats.get("carries", 0)
                 projection.rush_yards = projected_stats.get("rush_yards", 0)
                 projection.rush_td = projected_stats.get("rush_td", 0)
                 projection.targets = projected_stats.get("targets", 0)
@@ -364,8 +364,8 @@ class RookieProjectionService:
                 projection.rec_td = projected_stats.get("rec_td", 0)
                 
                 # Calculate efficiency metrics
-                if projection.carries > 0:
-                    projection.yards_per_carry = projection.rush_yards / projection.carries
+                if projection.rush_attempts > 0:
+                    projection.yards_per_carry = projection.rush_yards / projection.rush_attempts
                 
                 if projection.targets > 0:
                     projection.catch_pct = projection.receptions / projection.targets
@@ -394,7 +394,7 @@ class RookieProjectionService:
                 if "interceptions" in projected_stats:
                     projection.interceptions = projected_stats["interceptions"]
                 if "rush_attempts" in projected_stats:
-                    projection.carries = projected_stats["rush_attempts"]
+                    projection.rush_attempts = projected_stats["rush_attempts"]
                 if "rush_yards" in projected_stats:
                     projection.rush_yards = projected_stats["rush_yards"]
                 if "rush_td" in projected_stats:
@@ -402,7 +402,7 @@ class RookieProjectionService:
                     
             elif player.position in ["RB", "WR", "TE"]:
                 if "carries" in projected_stats or "rush_attempts" in projected_stats:
-                    projection.carries = projected_stats.get("carries", projected_stats.get("rush_attempts", projection.carries))
+                    projection.rush_attempts = projected_stats.get("rush_attempts", projected_stats.get("carries", projection.rush_attempts))
                 if "rush_yards" in projected_stats:
                     projection.rush_yards = projected_stats["rush_yards"]
                 if "rush_td" in projected_stats:
@@ -457,8 +457,8 @@ class RookieProjectionService:
             projection.interceptions = pass_attempts * model['int_rate']
             
             # Rushing stats
-            projection.carries = games * model['rush_att_per_game'] * playing_time_pct
-            projection.rush_yards = projection.carries * model['rush_yards_per_att']
+            projection.rush_attempts = games * model['rush_att_per_game'] * playing_time_pct
+            projection.rush_yards = projection.rush_attempts * model['rush_yards_per_att']
             projection.rush_td = games * model['rush_td_per_game'] * playing_time_pct
             
             # Calculate efficiency metrics
@@ -470,9 +470,9 @@ class RookieProjectionService:
             
         elif player.position == "RB":
             # Rushing stats
-            projection.carries = games * model['rush_att_per_game'] * playing_time_pct
-            projection.rush_yards = projection.carries * model['rush_yards_per_att']
-            projection.rush_td = projection.carries * model['rush_td_per_att']
+            projection.rush_attempts = games * model['rush_att_per_game'] * playing_time_pct
+            projection.rush_yards = projection.rush_attempts * model['rush_yards_per_att']
+            projection.rush_td = projection.rush_attempts * model['rush_td_per_att']
             
             # Receiving stats
             projection.targets = games * model['targets_per_game'] * playing_time_pct
@@ -493,9 +493,9 @@ class RookieProjectionService:
             projection.rec_td = projection.receptions * model['rec_td_per_catch']
             
             # Rushing stats (mainly for WR)
-            projection.carries = games * model['rush_att_per_game'] * playing_time_pct
-            projection.rush_yards = projection.carries * model['rush_yards_per_att']
-            projection.rush_td = projection.carries * model['rush_td_per_att']
+            projection.rush_attempts = games * model['rush_att_per_game'] * playing_time_pct
+            projection.rush_yards = projection.rush_attempts * model['rush_yards_per_att']
+            projection.rush_td = projection.rush_attempts * model['rush_td_per_att']
             
             # Efficiency metrics
             projection.catch_pct = model['catch_rate']
@@ -526,7 +526,7 @@ class RookieProjectionService:
         """
         try:
             # Get the player
-            player = self.db.query(Player).get(player_id)
+            player = self.db.query(Player).filter(Player.player_id == player_id).first()
             if not player:
                 logger.error(f"Player {player_id} not found")
                 return None
@@ -548,6 +548,46 @@ class RookieProjectionService:
                 template = self.db.query(RookieProjectionTemplate).filter(
                     RookieProjectionTemplate.position == player.position
                 ).order_by(RookieProjectionTemplate.draft_pick_max.desc()).first()
+                
+                # If we still don't have a template, create a default one based on position
+                if not template:
+                    logger.warning(f"Creating default template for {player.position}")
+                    template = RookieProjectionTemplate(
+                        template_id=str(uuid.uuid4()),
+                        position=player.position,
+                        draft_round=draft_position // 32 + 1,
+                        draft_pick_min=1,
+                        draft_pick_max=262,
+                        games=16.0,
+                        snap_share=0.5
+                    )
+                    
+                    # Set position-specific fields with default values
+                    if player.position == "QB":
+                        template.pass_attempts = 450.0
+                        template.comp_pct = 0.62
+                        template.yards_per_att = 7.0
+                        template.pass_td_rate = 0.042
+                        template.int_rate = 0.025
+                        template.rush_att_per_game = 4.0
+                        template.rush_yards_per_att = 4.8
+                        template.rush_td_per_game = 0.2
+                    elif player.position == "RB":
+                        template.rush_att_per_game = 11.0
+                        template.rush_yards_per_att = 4.2
+                        template.rush_td_per_att = 0.03
+                        template.targets_per_game = 3.0
+                        template.catch_rate = 0.7
+                        template.rec_yards_per_catch = 8.0
+                        template.rec_td_per_catch = 0.03
+                    elif player.position in ["WR", "TE"]:
+                        template.targets_per_game = 5.0
+                        template.catch_rate = 0.65
+                        template.rec_yards_per_catch = 12.0
+                        template.rec_td_per_catch = 0.05
+                        template.rush_att_per_game = 0.3
+                        template.rush_yards_per_att = 7.0
+                        template.rush_td_per_att = 0.03
                 
                 if not template:
                     logger.error(f"No fallback template found for {player.position}")
@@ -590,14 +630,35 @@ class RookieProjectionService:
             
             # Set position-specific metrics from template
             if player.position == "QB":
-                projection.pass_attempts = template.pass_attempts * template.games
-                projection.completions = projection.pass_attempts * template.comp_pct
-                projection.pass_yards = projection.pass_attempts * template.yards_per_att
-                projection.pass_td = projection.pass_attempts * template.pass_td_rate
-                projection.interceptions = projection.pass_attempts * template.int_rate
-                projection.carries = template.rush_att_per_game * template.games
-                projection.rush_yards = projection.carries * template.rush_yards_per_att
-                projection.rush_td = template.rush_td_per_game * template.games
+                if template.pass_attempts is not None:
+                    projection.pass_attempts = template.pass_attempts * template.games
+                    projection.completions = projection.pass_attempts * template.comp_pct
+                    projection.pass_yards = projection.pass_attempts * template.yards_per_att
+                    projection.pass_td = projection.pass_attempts * template.pass_td_rate
+                    projection.interceptions = projection.pass_attempts * template.int_rate
+                else:
+                    # Use defaults
+                    projection.pass_attempts = 450.0
+                    projection.completions = projection.pass_attempts * 0.62  # Default comp_pct
+                    projection.pass_yards = projection.pass_attempts * 7.0    # Default yards_per_att
+                    projection.pass_td = projection.pass_attempts * 0.042     # Default pass_td_rate
+                    projection.interceptions = projection.pass_attempts * 0.025  # Default int_rate
+                
+                # Rush stats
+                if template.rush_att_per_game is not None:
+                    projection.rush_attempts = template.rush_att_per_game * template.games
+                    if template.rush_yards_per_att is not None:
+                        projection.rush_yards = projection.rush_attempts * template.rush_yards_per_att
+                    else:
+                        projection.rush_yards = projection.rush_attempts * 4.8  # Default
+                    if template.rush_td_per_game is not None:
+                        projection.rush_td = template.rush_td_per_game * template.games
+                    else:
+                        projection.rush_td = template.games * 0.2  # Default
+                else:
+                    projection.rush_attempts = 4.0 * template.games  # Default rush_att_per_game
+                    projection.rush_yards = projection.rush_attempts * 4.8
+                    projection.rush_td = template.games * 0.2
                 
                 # Set efficiency metrics
                 projection.comp_pct = template.comp_pct
@@ -607,13 +668,44 @@ class RookieProjectionService:
                 projection.yards_per_carry = template.rush_yards_per_att
                 
             elif player.position == "RB":
-                projection.carries = template.rush_att_per_game * template.games
-                projection.rush_yards = projection.carries * template.rush_yards_per_att
-                projection.rush_td = projection.carries * template.rush_td_per_att
-                projection.targets = template.targets_per_game * template.games
-                projection.receptions = projection.targets * template.catch_rate
-                projection.rec_yards = projection.receptions * template.rec_yards_per_catch
-                projection.rec_td = projection.receptions * template.rec_td_per_catch
+                # Rush stats
+                if template.rush_att_per_game is not None:
+                    projection.rush_attempts = template.rush_att_per_game * template.games
+                    if template.rush_yards_per_att is not None:
+                        projection.rush_yards = projection.rush_attempts * template.rush_yards_per_att
+                    else:
+                        projection.rush_yards = projection.rush_attempts * 4.2  # Default
+                    if template.rush_td_per_att is not None:
+                        projection.rush_td = projection.rush_attempts * template.rush_td_per_att
+                    else:
+                        projection.rush_td = projection.rush_attempts * 0.03  # Default
+                else:
+                    projection.rush_attempts = 11.0 * template.games  # Default
+                    projection.rush_yards = projection.rush_attempts * 4.2  # Default
+                    projection.rush_td = projection.rush_attempts * 0.03  # Default
+                
+                # Receiving stats
+                if template.targets_per_game is not None:
+                    projection.targets = template.targets_per_game * template.games
+                    if template.catch_rate is not None:
+                        projection.receptions = projection.targets * template.catch_rate
+                    else:
+                        projection.receptions = projection.targets * 0.7  # Default
+                    
+                    if template.rec_yards_per_catch is not None and projection.receptions > 0:
+                        projection.rec_yards = projection.receptions * template.rec_yards_per_catch
+                    else:
+                        projection.rec_yards = projection.receptions * 8.0  # Default
+                    
+                    if template.rec_td_per_catch is not None and projection.receptions > 0:
+                        projection.rec_td = projection.receptions * template.rec_td_per_catch
+                    else:
+                        projection.rec_td = projection.receptions * 0.03  # Default
+                else:
+                    projection.targets = 3.0 * template.games  # Default
+                    projection.receptions = projection.targets * 0.7  # Default
+                    projection.rec_yards = projection.receptions * 8.0  # Default
+                    projection.rec_td = projection.receptions * 0.03  # Default
                 
                 # Set efficiency metrics
                 projection.catch_pct = template.catch_rate
@@ -621,13 +713,53 @@ class RookieProjectionService:
                 projection.yards_per_target = template.rec_yards_per_catch * template.catch_rate
                 
             elif player.position in ["WR", "TE"]:
-                projection.targets = template.targets_per_game * template.games
-                projection.receptions = projection.targets * template.catch_rate
-                projection.rec_yards = projection.receptions * template.rec_yards_per_catch
-                projection.rec_td = projection.receptions * template.rec_td_per_catch
-                projection.carries = template.rush_att_per_game * template.games
-                projection.rush_yards = projection.carries * template.rush_yards_per_att
-                projection.rush_td = projection.carries * template.rush_td_per_att
+                # Receiving stats (primary for WR/TE)
+                if template.targets_per_game is not None:
+                    projection.targets = template.targets_per_game * template.games
+                    if template.catch_rate is not None:
+                        projection.receptions = projection.targets * template.catch_rate
+                    else:
+                        projection.receptions = projection.targets * 0.65  # Default
+                    
+                    if template.rec_yards_per_catch is not None and projection.receptions > 0:
+                        projection.rec_yards = projection.receptions * template.rec_yards_per_catch
+                    else:
+                        projection.rec_yards = projection.receptions * 12.0  # Default
+                    
+                    if template.rec_td_per_catch is not None and projection.receptions > 0:
+                        projection.rec_td = projection.receptions * template.rec_td_per_catch
+                    else:
+                        projection.rec_td = projection.receptions * 0.05  # Default
+                else:
+                    # Use defaults
+                    default_targets_per_game = 5.0
+                    projection.targets = default_targets_per_game * template.games
+                    projection.receptions = projection.targets * 0.65  # Default
+                    projection.rec_yards = projection.receptions * 12.0  # Default
+                    projection.rec_td = projection.receptions * 0.05  # Default
+                
+                # Rush stats (minimal for WR, none for TE)
+                if template.rush_att_per_game is not None:
+                    projection.rush_attempts = template.rush_att_per_game * template.games
+                    if template.rush_yards_per_att is not None:
+                        projection.rush_yards = projection.rush_attempts * template.rush_yards_per_att
+                    else:
+                        projection.rush_yards = projection.rush_attempts * 7.0  # Default
+                    
+                    if template.rush_td_per_att is not None:
+                        projection.rush_td = projection.rush_attempts * template.rush_td_per_att
+                    else:
+                        projection.rush_td = projection.rush_attempts * 0.03  # Default
+                else:
+                    # Use defaults - minimal for WR, none for TE
+                    if player.position == "WR":
+                        projection.rush_attempts = 0.3 * template.games  # Default
+                        projection.rush_yards = projection.rush_attempts * 7.0  # Default
+                        projection.rush_td = projection.rush_attempts * 0.03  # Default
+                    else:  # TE
+                        projection.rush_attempts = 0.0
+                        projection.rush_yards = 0.0
+                        projection.rush_td = 0.0
                 
                 # Set efficiency metrics
                 projection.catch_pct = template.catch_rate
@@ -649,6 +781,8 @@ class RookieProjectionService:
             
         except Exception as e:
             logger.error(f"Error creating draft-based projection: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             self.db.rollback()
             return None
     
@@ -691,7 +825,7 @@ class RookieProjectionService:
         elif player.position == "RB":
             # Adjust rush volume based on team tendencies
             team_rush_att_per_game = team_stats.rush_attempts / 17
-            model_rush_att_per_game = projection.carries / projection.games
+            model_rush_att_per_game = projection.rush_attempts / projection.games
             
             # Blend model and team tendencies (60% model, 40% team)
             adjusted_rush_att = (
@@ -699,9 +833,9 @@ class RookieProjectionService:
             ) * projection.games * playing_time_pct
             
             # Apply adjustment
-            if projection.carries > 0:
-                adj_factor = adjusted_rush_att / projection.carries
-                projection.carries = adjusted_rush_att
+            if projection.rush_attempts > 0:
+                adj_factor = adjusted_rush_att / projection.rush_attempts
+                projection.rush_attempts = adjusted_rush_att
                 projection.rush_yards *= adj_factor
                 projection.rush_td *= adj_factor
             

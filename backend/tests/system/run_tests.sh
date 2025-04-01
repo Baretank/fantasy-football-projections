@@ -10,6 +10,8 @@ SCENARIO_TESTS="tests/system/test_scenarios.py"
 OVERRIDE_TESTS="tests/system/test_overrides.py"
 ALL_COMPONENT_TESTS="$VETERAN_TESTS $ROOKIE_TESTS $TEAM_ADJUST_TESTS $SCENARIO_TESTS $OVERRIDE_TESTS"
 PIPELINE_TESTS="tests/system/test_complete_season_pipeline.py"
+END_TO_END_TESTS="tests/system/test_end_to_end_flows.py"
+IMPORT_TESTS="tests/system/test_import_projection_flow.py tests/system/test_season_upload.py"
 
 # Run based on parameter
 case "$1" in
@@ -41,8 +43,16 @@ case "$1" in
     echo "Running pipeline tests"
     python -m pytest $PIPELINE_TESTS -v
     ;;
+  "e2e")
+    echo "Running end-to-end flow tests"
+    python -m pytest $END_TO_END_TESTS -v
+    ;;
+  "import")
+    echo "Running import/export process tests"
+    python -m pytest $IMPORT_TESTS -v
+    ;;
   *)
-    echo "Usage: ./run_tests.sh [veteran|rookie|team|scenario|override|components|pipeline]"
+    echo "Usage: ./run_tests.sh [veteran|rookie|team|scenario|override|components|pipeline|e2e|import]"
     echo "Invalid option: $1"
     exit 1
     ;;

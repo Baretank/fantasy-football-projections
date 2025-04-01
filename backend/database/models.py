@@ -40,7 +40,7 @@ class GameStats(Base):
 
     @classmethod
     def from_game_log(cls, player_id: str, game_log_row: Dict) -> 'GameStats':
-        """Create GameStats instance from a PFR game log row"""
+        """Create GameStats instance from an NFL data game log row"""
         base_data = {
             'player_id': player_id,
             'season': int(game_log_row['date'][:4]),  # Extract year from date
@@ -274,8 +274,13 @@ class Projection(Base):
             
         return cls(**base)
 
-    def calculate_fantasy_points(self) -> float:
-        """Calculate half-PPR fantasy points with enhanced accuracy"""
+    def calculate_fantasy_points(self, scoring_type: str = 'half') -> float:
+        """
+        Calculate fantasy points with enhanced accuracy
+        
+        Args:
+            scoring_type: 'standard', 'half', or 'ppr'
+        """
         points = 0.0
         
         # Passing points - use net passing yards if available
@@ -300,13 +305,28 @@ class Projection(Base):
             
         # Receiving points
         if self.receptions:
-            points += (self.receptions * 0.5)  # Half PPR
+            if scoring_type == 'ppr':
+                points += (self.receptions * 1.0)  # Full PPR
+            elif scoring_type == 'half':
+                points += (self.receptions * 0.5)  # Half PPR
+            # No points for receptions in standard scoring
+            
         if self.rec_yards:
             points += (self.rec_yards / 10.0)  # 0.1 points per receiving yard
         if self.rec_td:
             points += (self.rec_td * 6.0)
             
         return points
+        
+    @property
+    def standard(self) -> float:
+        """Calculate standard fantasy points"""
+        return self.calculate_fantasy_points(scoring_type='standard')
+        
+    @property
+    def ppr(self) -> float:
+        """Calculate PPR fantasy points"""
+        return self.calculate_fantasy_points(scoring_type='ppr')
 
 class Scenario(Base):
     """Projection scenarios for what-if analysis"""

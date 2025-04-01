@@ -167,7 +167,7 @@ class ScenarioService:
                     sack_rate=source_proj.sack_rate,
                     
                     # Rushing
-                    carries=source_proj.carries,
+                    rush_attempts=source_proj.rush_attempts,
                     rush_yards=source_proj.rush_yards,
                     rush_td=source_proj.rush_td,
                     
@@ -195,7 +195,7 @@ class ScenarioService:
                     comp_pct=source_proj.comp_pct,
                     yards_per_att=source_proj.yards_per_att,
                     net_yards_per_att=source_proj.net_yards_per_att,
-                    car_pct=source_proj.car_pct,
+                    rush_att_pct=source_proj.rush_att_pct,
                     yards_per_carry=source_proj.yards_per_carry,
                     net_yards_per_carry=source_proj.net_yards_per_carry,
                     tar_pct=source_proj.tar_pct,
@@ -436,7 +436,7 @@ class ScenarioService:
                 "pass_attempts": 0,
                 "pass_yards": 0,
                 "pass_td": 0,
-                "carries": 0,  # Using carries instead of rush_attempts to match model
+                "rush_attempts": 0,
                 "rush_yards": 0,
                 "rush_td": 0,
                 "targets": 0,
@@ -455,7 +455,7 @@ class ScenarioService:
                 "pass_attempts": team_stats.pass_attempts - team_totals["pass_attempts"],
                 "pass_yards": team_stats.pass_yards - team_totals["pass_yards"],
                 "pass_td": team_stats.pass_td - team_totals["pass_td"],
-                "carries": team_stats.carries - team_totals["carries"],  # Using carries instead of rush_attempts
+                "rush_attempts": team_stats.rush_attempts - team_totals["rush_attempts"],
                 "rush_yards": team_stats.rush_yards - team_totals["rush_yards"],
                 "rush_td": team_stats.rush_td - team_totals["rush_td"],
                 "targets": team_stats.targets - team_totals["targets"],
@@ -482,7 +482,7 @@ class ScenarioService:
                         "pass_attempts": max(0, differences["pass_attempts"]),
                         "pass_yards": max(0, differences["pass_yards"]),
                         "pass_td": max(0, differences["pass_td"]),
-                        "carries": 0,  # Using carries instead of rush_attempts
+                        "rush_attempts": 0,
                         "rush_yards": 0,
                         "rush_td": 0
                     }
@@ -491,14 +491,14 @@ class ScenarioService:
                     fill_projections.append(qb_fill)
             
             # RB fill player (if needed)
-            if differences["carries"] > 0 or differences["rush_yards"] > 0 or differences["rush_td"] > 0:
+            if differences["rush_attempts"] > 0 or differences["rush_yards"] > 0 or differences["rush_td"] > 0:
                 rb_fill = await self._create_fill_player(
                     scenario_id=scenario_id,
                     team=team,
                     position="RB",
                     season=season,
                     stats={
-                        "carries": max(0, differences["carries"]),  # Using carries instead of rush_attempts
+                        "rush_attempts": max(0, differences["rush_attempts"]),
                         "rush_yards": max(0, differences["rush_yards"]),
                         "rush_td": max(0, differences["rush_td"]),
                         "targets": 0,

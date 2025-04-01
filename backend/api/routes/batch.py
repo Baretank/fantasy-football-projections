@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import Dict, List, Optional, Any
@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Any
 from backend.database.database import get_db
 from backend.services.batch_service import BatchService
 from backend.services.cache_service import get_cache
+from backend.services.nfl_data_import_service import NFLDataImportService
 from backend.api.schemas import (
     BatchProjectionCreateRequest,
     BatchProjectionAdjustRequest,
@@ -162,3 +163,91 @@ async def clear_cache(
     else:
         cache.clear()
         return {"status": "success", "message": "Cache cleared"}
+
+# NFL Data Import Endpoints
+
+@router.post("/import/nfl-data/{season}")
+async def import_nfl_data(
+    season: int, 
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = None
+):
+    """
+    Import NFL data for the specified season using the new NFL data sources.
+    
+    Handles complete data import from nfl-data-py and NFL API sources,
+    processes the data, and stores it in the database.
+    
+    Args:
+        season: NFL season year (e.g., 2023)
+    """
+    service = NFLDataImportService(db)
+    
+    if background_tasks:
+        # Run in background for long operations
+        background_tasks.add_task(service.import_season, season)
+        return {"status": "Import started in background"}
+    else:
+        # Run immediately for smaller imports or testing
+        results = await service.import_season(season)
+        return results
+
+@router.post("/import/nfl-data/players/{season}")
+async def import_nfl_players(season: int, db: Session = Depends(get_db)):
+    """
+    Import only player data for the specified season.
+    
+    Args:
+        season: NFL season year (e.g., 2023)
+    """
+    service = NFLDataImportService(db)
+    results = await service.import_players(season)
+    return results
+
+@router.post("/import/nfl-data/weekly/{season}")
+async def import_nfl_weekly(season: int, db: Session = Depends(get_db)):
+    """
+    Import only weekly statistics for the specified season.
+    
+    Args:
+        season: NFL season year (e.g., 2023)
+    """
+    service = NFLDataImportService(db)
+    results = await service.import_weekly_stats(season)
+    return results
+
+@router.post("/import/nfl-data/team/{season}")
+async def import_nfl_team_stats(season: int, db: Session = Depends(get_db)):
+    """
+    Import only team statistics for the specified season.
+    
+    Args:
+        season: NFL season year (e.g., 2023)
+    """
+    service = NFLDataImportService(db)
+    results = await service.import_team_stats(season)
+    return results
+
+@router.post("/import/nfl-data/totals/{season}")
+async def calculate_nfl_totals(season: int, db: Session = Depends(get_db)):
+    """
+    Calculate season totals from weekly data.
+    
+    Args:
+        season: NFL season year (e.g., 2023)
+    """
+    service = NFLDataImportService(db)
+    results = await service.calculate_season_totals(season)
+    return results
+
+@router.post("/import/nfl-data/validate/{season}")
+async def validate_nfl_data(season: int, db: Session = Depends(get_db)):
+    """
+    Validate NFL data for the specified season.
+    
+    Args:
+        season: NFL season year (e.g., 2023)
+    """
+    service = NFLDataImportService(db)
+    results = await service.validate_data(season)
+    return results

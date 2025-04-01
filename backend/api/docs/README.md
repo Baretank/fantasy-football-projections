@@ -227,6 +227,26 @@ curl -X POST "http://localhost:8000/api/batch/overrides" \
   -d '{"player_ids":["123e4567-e89b-12d3-a456-426614174000","456e7890-f12d-34e5-b678-426614174000"],"stat_name":"pass_attempts","value":550,"notes":"Adjusted based on new offensive coordinator"}'
 ```
 
+#### POST /batch/import/nfl-data/{season}
+Import NFL data for a specific season.
+
+Query Parameters:
+- `type` (required): Type of data to import (full, players, weekly, team, totals, validate)
+- `background` (optional): Run the import in the background (default: false)
+
+Example Request:
+```bash
+curl -X POST "http://localhost:8000/api/batch/import/nfl-data/2023?type=full"
+```
+
+#### GET /batch/import/status/{task_id}
+Check the status of a background import task.
+
+Example Request:
+```bash
+curl -X GET "http://localhost:8000/api/batch/import/status/task_12345"
+```
+
 #### POST /batch/export
 Export projection data for multiple players.
 
@@ -353,6 +373,11 @@ The Fantasy Football Projections API has been significantly enhanced through sev
 - ✅ Team-level constraint management
 - ✅ Response caching for improved performance
 - ✅ Enhanced error handling and validation
+- ✅ NFL data integration with official NFL data sources
+- ✅ Comprehensive NFL data import system
+- ✅ Weekly stats and season totals calculation
+- ✅ Data validation and consistency checks
+- ✅ Comprehensive testing for NFL data integration
 
 ### In Progress
 - 🔄 Starter/Backup and Status Tags UI components
@@ -366,6 +391,10 @@ The Fantasy Football Projections API has been significantly enhanced through sev
 - ⏳ Advanced rate limiting
 - ⏳ User role-based permissions
 - ⏳ Data visualization endpoints
+- ⏳ Automated weekly in-season updates
+- ⏳ Injury status tracking and updates
+- ⏳ Strength of schedule analysis
+- ⏳ Weather data integration for game forecasting
 
 ## Status Codes
 
@@ -475,7 +504,18 @@ For API support:
 
 ## Changelog
 
-### Version 0.3.0 (Current)
+### Version 0.4.0 (Current)
+- Implemented NFL data integration with official NFL data sources
+- Added NFL API and nfl-data-py adapters for data import
+- Created comprehensive import system for player, weekly, and team stats
+- Added data validation and consistency checks
+- Implemented rate limiting protection for external APIs
+- Enhanced error handling and retry mechanisms
+- Added batch import endpoints for NFL data
+- Created command-line tools for bulk data import
+- Added comprehensive test suite for NFL data integration
+
+### Version 0.3.0
 - Added projection variance endpoints
 - Added rookie projection support
 - Enhanced batch operations

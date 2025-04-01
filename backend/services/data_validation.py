@@ -113,7 +113,7 @@ class DataValidationService:
         # Convert to dictionary
         base_stat_dict = {stat.stat_type: stat.value for stat in base_stats}
         
-        # Define stat mapping (could also reference DataImportService.stat_mappings)
+        # Define stat mapping (similar to the mappings in NFLDataImportService)
         stat_mappings = {
             'QB': {
                 'completions': 'cmp',
@@ -155,14 +155,14 @@ class DataValidationService:
         # Calculate totals from game logs
         calculated_totals = {}
         
-        for stat_name, pfr_name in stat_mappings[player.position].items():
+        for stat_name, nfl_data_name in stat_mappings[player.position].items():
             total = 0
             for game in game_stats:
-                if pfr_name in game.stats:
+                if nfl_data_name in game.stats:
                     try:
-                        total += float(game.stats[pfr_name])
+                        total += float(game.stats[nfl_data_name])
                     except (ValueError, TypeError):
-                        issues.append(f"Player {player.name} has invalid value for {pfr_name} in game {game.week}")
+                        issues.append(f"Player {player.name} has invalid value for {nfl_data_name} in game {game.week}")
                         continue
             
             calculated_totals[stat_name] = total

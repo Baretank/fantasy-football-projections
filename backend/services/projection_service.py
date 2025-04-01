@@ -139,7 +139,7 @@ class ProjectionService:
                 'pass_yards': projection.pass_yards,
                 'pass_td': projection.pass_td,
                 'interceptions': projection.interceptions,
-                'carries': projection.carries,
+                'rush_attempts': projection.rush_attempts,
                 'rush_yards': projection.rush_yards,
                 'rush_td': projection.rush_td,
                 'targets': projection.targets,
@@ -187,21 +187,21 @@ class ProjectionService:
                     
                 if 'rush_volume' in adjustments:
                     factor = adjustments['rush_volume']
-                    projection_values['carries'] *= factor
+                    projection_values['rush_attempts'] *= factor
                     projection_values['rush_yards'] *= factor
                     projection_values['rush_td'] *= factor
-                    if projection_values['carries'] > 0:
-                        projection_values['yards_per_carry'] = projection_values['rush_yards'] / projection_values['carries']
+                    if projection_values['rush_attempts'] > 0:
+                        projection_values['yards_per_carry'] = projection_values['rush_yards'] / projection_values['rush_attempts']
                 
             elif player.position == 'RB':
                 # RB adjustments
                 if 'rush_volume' in adjustments:
                     factor = adjustments['rush_volume']
-                    projection_values['carries'] *= factor
+                    projection_values['rush_attempts'] *= factor
                     projection_values['rush_yards'] *= factor
                     projection_values['rush_td'] *= factor
-                    if projection_values['carries'] > 0:
-                        projection_values['yards_per_carry'] = projection_values['rush_yards'] / projection_values['carries']
+                    if projection_values['rush_attempts'] > 0:
+                        projection_values['yards_per_carry'] = projection_values['rush_yards'] / projection_values['rush_attempts']
                 
                 if 'target_share' in adjustments:
                     factor = adjustments['target_share']
@@ -520,7 +520,7 @@ class ProjectionService:
             
         if 'rush_share' in adjustments:
             factor = adjustments['rush_share']
-            projection.carries = projection.carries * factor
+            projection.rush_attempts = projection.rush_attempts * factor
             projection.rush_yards = projection.rush_yards * factor
             projection.rush_td = projection.rush_td * factor
 
@@ -533,12 +533,12 @@ class ProjectionService:
         """Adjust RB-specific statistics."""
         if 'rush_share' in adjustments:
             factor = adjustments['rush_share']
-            projection.carries = projection.carries * factor
+            projection.rush_attempts = projection.rush_attempts * factor
             projection.rush_yards = projection.rush_yards * factor
             projection.rush_td = projection.rush_td * factor
-            if projection.carries > 0:
-                projection.yards_per_carry = projection.rush_yards / projection.carries
-                projection.rush_td_rate = projection.rush_td / projection.carries
+            if projection.rush_attempts > 0:
+                projection.yards_per_carry = projection.rush_yards / projection.rush_attempts
+                projection.rush_td_rate = projection.rush_td / projection.rush_attempts
             
         if 'target_share' in adjustments:
             factor = adjustments['target_share']
@@ -602,11 +602,11 @@ class ProjectionService:
                 
             if 'rush_volume' in adjustments:
                 factor = adjustments['rush_volume']
-                if projection.carries is not None:
-                    projection.carries = projection.carries * factor
+                if projection.rush_attempts is not None:
+                    projection.rush_attempts = projection.rush_attempts * factor
                     projection.rush_yards = projection.rush_yards * factor
-                    if projection.carries > 0:
-                        projection.yards_per_carry = projection.rush_yards / projection.carries
+                    if projection.rush_attempts > 0:
+                        projection.yards_per_carry = projection.rush_yards / projection.rush_attempts
                     
             if 'scoring_rate' in adjustments:
                 factor = adjustments['scoring_rate']
@@ -616,8 +616,8 @@ class ProjectionService:
                         projection.pass_td_rate = projection.pass_td / projection.pass_attempts
                 if projection.rush_td is not None:
                     projection.rush_td = projection.rush_td * factor
-                    if projection.carries and projection.carries > 0:
-                        projection.rush_td_rate = projection.rush_td / projection.carries
+                    if projection.rush_attempts and projection.rush_attempts > 0:
+                        projection.rush_td_rate = projection.rush_td / projection.rush_attempts
                 if projection.rec_td is not None:
                     projection.rec_td = projection.rec_td * factor
                     if projection.targets and projection.targets > 0:
@@ -643,7 +643,7 @@ class ProjectionService:
         projection.pass_yards = stats_dict.get('pass_yards', team_stats.pass_yards)
         projection.pass_td = stats_dict.get('pass_td', team_stats.pass_td)
         projection.interceptions = stats_dict.get('interceptions', 0)
-        projection.carries = stats_dict.get('rush_attempts', 0)
+        projection.rush_attempts = stats_dict.get('rush_attempts', 0)
         projection.rush_yards = stats_dict.get('rush_yards', 0)
         projection.rush_td = stats_dict.get('rush_td', 0)
         
@@ -653,12 +653,12 @@ class ProjectionService:
             projection.comp_pct = projection.completions / projection.pass_attempts * 100
             projection.pass_td_rate = projection.pass_td / projection.pass_attempts
             
-        if projection.carries > 0:
-            projection.yards_per_carry = projection.rush_yards / projection.carries
+        if projection.rush_attempts > 0:
+            projection.yards_per_carry = projection.rush_yards / projection.rush_attempts
 
     def _set_rb_stats(self, projection: Projection, stats_dict: Dict, team_stats: TeamStat) -> None:
         """Set RB-specific projection stats."""
-        projection.carries = stats_dict.get('rush_attempts', 0)
+        projection.rush_attempts = stats_dict.get('rush_attempts', 0)
         projection.rush_yards = stats_dict.get('rush_yards', 0)
         projection.rush_td = stats_dict.get('rush_td', 0)
         projection.targets = stats_dict.get('targets', 0)
@@ -667,9 +667,9 @@ class ProjectionService:
         projection.rec_td = stats_dict.get('rec_td', 0)
         
         # Calculate efficiency metrics
-        if projection.carries > 0:
-            projection.yards_per_carry = projection.rush_yards / projection.carries
-            projection.rush_td_rate = projection.rush_td / projection.carries
+        if projection.rush_attempts > 0:
+            projection.yards_per_carry = projection.rush_yards / projection.rush_attempts
+            projection.rush_td_rate = projection.rush_td / projection.rush_attempts
             
         if projection.targets > 0:
             projection.catch_pct = projection.receptions / projection.targets * 100
@@ -682,7 +682,7 @@ class ProjectionService:
         projection.receptions = stats_dict.get('receptions', 0)
         projection.rec_yards = stats_dict.get('rec_yards', 0)
         projection.rec_td = stats_dict.get('rec_td', 0)
-        projection.carries = stats_dict.get('rush_attempts', 0)
+        projection.rush_attempts = stats_dict.get('rush_attempts', 0)
         projection.rush_yards = stats_dict.get('rush_yards', 0)
         projection.rush_td = stats_dict.get('rush_td', 0)
         
@@ -692,5 +692,5 @@ class ProjectionService:
             projection.yards_per_target = projection.rec_yards / projection.targets
             projection.rec_td_rate = projection.rec_td / projection.targets
             
-        if projection.carries > 0:
-            projection.yards_per_carry = projection.rush_yards / projection.carries
+        if projection.rush_attempts > 0:
+            projection.yards_per_carry = projection.rush_yards / projection.rush_attempts

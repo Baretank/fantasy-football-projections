@@ -51,7 +51,6 @@ class TestVeteranPlayerProjections:
                 rush_attempts=400,
                 rush_yards=1800,
                 rush_td=15,
-                carries=400,
                 rush_yards_per_carry=4.5,
                 targets=600,
                 receptions=390,
@@ -74,7 +73,6 @@ class TestVeteranPlayerProjections:
                 rush_attempts=380,
                 rush_yards=1750,
                 rush_td=14,
-                carries=380,
                 rush_yards_per_carry=4.6,
                 targets=620,
                 receptions=400,
@@ -188,8 +186,7 @@ class TestVeteranPlayerProjections:
         assert projection.season == setup_veteran_data["current_season"]
         
         # RB-specific stats
-        # TODO: Standardize on rush_attempts throughout the codebase to match team_stats
-        assert projection.carries > 0  # Currently using carries field in the Projection model
+        assert projection.rush_attempts > 0
         assert projection.rush_yards > 0
         assert projection.rush_td > 0
         assert projection.targets > 0

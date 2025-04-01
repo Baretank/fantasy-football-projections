@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 from sqlalchemy import and_
 
-from backend.services.data_import_service import DataImportService
+from backend.services.nfl_data_import_service import NFLDataImportService
 from backend.services.player_import_service import PlayerImportService
 from backend.services.team_stat_service import TeamStatService
 from backend.services.projection_service import ProjectionService
@@ -34,7 +34,7 @@ class TestCompleteSeasonPipeline:
     def services(self, test_db):
         """Create all services needed for complete pipeline testing."""
         return {
-            "data_import": DataImportService(test_db),
+            "data_import": NFLDataImportService(test_db),
             "player_import": PlayerImportService(test_db),
             "team_stat": TeamStatService(test_db),
             "projection": ProjectionService(test_db),
@@ -107,7 +107,6 @@ class TestCompleteSeasonPipeline:
                 rush_attempts=400,
                 rush_yards=1800,
                 rush_td=15,
-                carries=400,
                 rush_yards_per_carry=4.5,
                 targets=600,
                 receptions=390,
@@ -130,7 +129,6 @@ class TestCompleteSeasonPipeline:
                 rush_attempts=380,
                 rush_yards=1750,
                 rush_td=14,
-                carries=380,
                 rush_yards_per_carry=4.6,
                 targets=620,
                 receptions=400,
@@ -154,14 +152,14 @@ class TestCompleteSeasonPipeline:
                         BaseStat(player_id=player.player_id, season=previous_season, stat_type="pass_yards", value=4100.0),
                         BaseStat(player_id=player.player_id, season=previous_season, stat_type="pass_td", value=28.0),
                         BaseStat(player_id=player.player_id, season=previous_season, stat_type="interceptions", value=10.0),
-                        BaseStat(player_id=player.player_id, season=previous_season, stat_type="carries", value=55.0),
+                        BaseStat(player_id=player.player_id, season=previous_season, stat_type="rush_attempts", value=55.0),
                         BaseStat(player_id=player.player_id, season=previous_season, stat_type="rush_yards", value=250.0),
                         BaseStat(player_id=player.player_id, season=previous_season, stat_type="rush_td", value=2.0)
                     ]
                 elif player.position == "RB":
                     stats = [
                         BaseStat(player_id=player.player_id, season=previous_season, stat_type="games", value=16.0),
-                        BaseStat(player_id=player.player_id, season=previous_season, stat_type="carries", value=240.0),
+                        BaseStat(player_id=player.player_id, season=previous_season, stat_type="rush_attempts", value=240.0),
                         BaseStat(player_id=player.player_id, season=previous_season, stat_type="rush_yards", value=1100.0),
                         BaseStat(player_id=player.player_id, season=previous_season, stat_type="rush_td", value=9.0),
                         BaseStat(player_id=player.player_id, season=previous_season, stat_type="targets", value=60.0),
@@ -176,7 +174,7 @@ class TestCompleteSeasonPipeline:
                         BaseStat(player_id=player.player_id, season=previous_season, stat_type="receptions", value=105.0),
                         BaseStat(player_id=player.player_id, season=previous_season, stat_type="rec_yards", value=1300.0),
                         BaseStat(player_id=player.player_id, season=previous_season, stat_type="rec_td", value=10.0),
-                        BaseStat(player_id=player.player_id, season=previous_season, stat_type="carries", value=10.0),
+                        BaseStat(player_id=player.player_id, season=previous_season, stat_type="rush_attempts", value=10.0),
                         BaseStat(player_id=player.player_id, season=previous_season, stat_type="rush_yards", value=60.0),
                         BaseStat(player_id=player.player_id, season=previous_season, stat_type="rush_td", value=0.0)
                     ]
@@ -425,7 +423,7 @@ class TestCompleteSeasonPipeline:
             
             # Sum key team stats
             total_pass_attempts = sum(getattr(p, 'pass_attempts', 0) for p in team_projections)
-            total_rush_attempts = sum(getattr(p, 'carries', 0) for p in team_projections)
+            total_rush_attempts = sum(getattr(p, 'rush_attempts', 0) for p in team_projections)
             total_targets = sum(getattr(p, 'targets', 0) for p in team_projections)
             
             # Targets should be close to pass attempts

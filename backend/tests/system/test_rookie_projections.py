@@ -37,7 +37,6 @@ class TestRookieProjections:
                 rush_attempts=380,
                 rush_yards=1750,
                 rush_td=14,
-                carries=380,
                 rush_yards_per_carry=4.6,
                 targets=620,
                 receptions=400,
@@ -284,7 +283,7 @@ class TestRookieProjections:
         assert projection.pass_yards > 0
         assert projection.pass_td > 0
         assert projection.interceptions > 0
-        assert projection.carries > 0
+        assert projection.rush_attempts > 0
         assert projection.rush_yards > 0
         assert projection.rush_td > 0
         
@@ -313,10 +312,19 @@ class TestRookieProjections:
         
         # Mid-round QB should have reduced stats compared to early picks
         top_qb = next(r for r in setup_rookie_data["rookies"] if r.position == "QB" and r.draft_pick == 1)
+        
+        # Create projection for top QB if it doesn't exist
         top_qb_proj = test_db.query(Projection).filter(
             Projection.player_id == top_qb.player_id,
             Projection.season == setup_rookie_data["current_season"]
         ).first()
+        
+        if not top_qb_proj:
+            top_qb_proj = await rookie_service.create_draft_based_projection(
+                player_id=top_qb.player_id,
+                draft_position=top_qb.draft_pick,
+                season=setup_rookie_data["current_season"]
+            )
         
         # Should be somewhat lower than top pick, but not by huge margin
         assert projection.pass_attempts <= top_qb_proj.pass_attempts
@@ -341,7 +349,7 @@ class TestRookieProjections:
         
         # RB-specific stats
         assert projection.games > 0
-        assert projection.carries > 0
+        assert projection.rush_attempts > 0
         assert projection.rush_yards > 0
         assert projection.rush_td > 0
         assert projection.targets > 0
@@ -388,14 +396,17 @@ class TestRookieProjections:
         if len(qb_projections) >= 2:
             qb_projs_sorted = sorted(qb_projections, 
                                      key=lambda p: test_db.query(Player).filter(Player.player_id == p.player_id).first().draft_pick)
+            
             # First pick should have better projection than later picks
-            assert qb_projs_sorted[0].half_ppr >= qb_projs_sorted[1].half_ppr
+            if qb_projs_sorted[0] and qb_projs_sorted[1]:
+                assert qb_projs_sorted[0].half_ppr >= qb_projs_sorted[1].half_ppr
         
         if len(rb_projections) >= 2:
             rb_projs_sorted = sorted(rb_projections, 
                                      key=lambda p: test_db.query(Player).filter(Player.player_id == p.player_id).first().draft_pick)
             # Earlier pick should have better projection
-            assert rb_projs_sorted[0].half_ppr >= rb_projs_sorted[1].half_ppr
+            if rb_projs_sorted[0] and rb_projs_sorted[1]:
+                assert rb_projs_sorted[0].half_ppr >= rb_projs_sorted[1].half_ppr
     
     @pytest.mark.asyncio
     async def test_fantasy_points_calculation(self, rookie_service, setup_rookie_data, test_db):
