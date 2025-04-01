@@ -347,7 +347,12 @@ class BatchService:
                 if "team" in filters:
                     query = query.filter(Player.team == filters["team"])
                 if "position" in filters:
-                    query = query.filter(Player.position == filters["position"])
+                    position = filters["position"]
+                    # Handle both string and list of positions
+                    if isinstance(position, list):
+                        query = query.filter(Player.position.in_(position))
+                    else:
+                        query = query.filter(Player.position == position)
                 if "season" in filters:
                     query = query.filter(Projection.season == filters["season"])
                 if "scenario_id" in filters:
@@ -501,20 +506,24 @@ class BatchService:
             
             # Add position-specific stats
             if proj.player.position == "QB":
+                # Use rush_attempts instead of carries for standardization
+                rush_attempts = getattr(proj, 'rush_attempts', None)
                 proj_data.update({
                     "pass_attempts": proj.pass_attempts,
                     "completions": proj.completions,
                     "pass_yards": proj.pass_yards,
                     "pass_td": proj.pass_td,
                     "interceptions": proj.interceptions,
-                    "carries": proj.carries,
+                    "rush_attempts": rush_attempts,
                     "rush_yards": proj.rush_yards,
                     "rush_td": proj.rush_td
                 })
             elif proj.player.position in ["RB", "WR", "TE"]:
-                if proj.carries is not None:
+                # Use rush_attempts instead of carries for standardization
+                rush_attempts = getattr(proj, 'rush_attempts', None)
+                if rush_attempts is not None:
                     proj_data.update({
-                        "carries": proj.carries,
+                        "rush_attempts": rush_attempts,
                         "rush_yards": proj.rush_yards,
                         "rush_td": proj.rush_td
                     })
