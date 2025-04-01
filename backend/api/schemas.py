@@ -225,6 +225,7 @@ class ProjectionCreateRequest(BaseModel):
     """Request to create a new projection."""
     player_id: str = Field(..., description="Player ID")
     season: int = Field(..., description="Season year")
+    scenario_id: Optional[str] = Field(None, description="Optional scenario ID")
 
 class ProjectionAdjustRequest(BaseModel):
     """Request to adjust a projection."""

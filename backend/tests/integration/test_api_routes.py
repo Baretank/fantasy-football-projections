@@ -113,7 +113,7 @@ class TestProjectionRoutes:
             pass_yards=4800.0,
             pass_td=38.0,
             interceptions=10.0,
-            carries=60.0,
+            rush_attempts=60.0,  # Changed from carries to rush_attempts
             rush_yards=350.0,
             rush_td=3.0
         )
@@ -146,7 +146,7 @@ class TestProjectionRoutes:
                     pass_yards=4800.0,
                     pass_td=38.0,
                     interceptions=10.0,
-                    carries=60.0,
+                    rush_attempts=60.0,  # Changed from carries to rush_attempts
                     rush_yards=350.0,
                     rush_td=3.0
                 )
@@ -191,7 +191,7 @@ class TestScenarioRoutes:
         }
         
         # Create
-        response = client.post("/api/scenarios/", json=scenario_data)
+        response = client.post("/api/scenarios/scenarios/", json=scenario_data)
         
         assert response.status_code == 201
         data = response.json()
@@ -199,7 +199,7 @@ class TestScenarioRoutes:
         assert data["name"] == "Test Scenario"
         
         # Get scenario by ID
-        response = client.get(f"/api/scenarios/{scenario_id}")
+        response = client.get(f"/api/scenarios/scenarios/{scenario_id}")
         
         assert response.status_code == 200
         data = response.json()
@@ -207,7 +207,7 @@ class TestScenarioRoutes:
         assert data["name"] == "Test Scenario"
         
         # Get all scenarios
-        response = client.get("/api/scenarios/")
+        response = client.get("/api/scenarios/scenarios/")
         
         assert response.status_code == 200
         data = response.json()
@@ -229,7 +229,7 @@ class TestScenarioRoutes:
         test_db.commit()
         
         # Delete the scenario
-        response = client.delete(f"/api/scenarios/{scenario.scenario_id}")
+        response = client.delete(f"/api/scenarios/scenarios/{scenario.scenario_id}")
         
         assert response.status_code == 200
         data = response.json()
@@ -257,7 +257,7 @@ class TestOverrideRoutes:
             pass_yards=4800.0,
             pass_td=38.0,
             interceptions=10.0,
-            carries=60.0,
+            rush_attempts=60.0,  # Changed from carries to rush_attempts
             rush_yards=350.0,
             rush_td=3.0
         )
@@ -273,7 +273,7 @@ class TestOverrideRoutes:
             "notes": "Testing override"
         }
         
-        response = client.post("/api/overrides/", json=override_data)
+        response = client.post("/api/overrides/overrides/", json=override_data)
         
         assert response.status_code == 201
         data = response.json()
@@ -283,7 +283,7 @@ class TestOverrideRoutes:
         assert data["manual_value"] == 45.0
         
         # Get overrides for player
-        response = client.get(f"/api/overrides/player/{player_id}")
+        response = client.get(f"/api/overrides/overrides/player/{player_id}")
         
         assert response.status_code == 200
         data = response.json()
@@ -291,14 +291,14 @@ class TestOverrideRoutes:
         assert any(o["override_id"] == override_id for o in data)
         
         # Delete the override
-        response = client.delete(f"/api/overrides/{override_id}")
+        response = client.delete(f"/api/overrides/overrides/{override_id}")
         
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
         
         # Verify it's gone
-        overrides = client.get(f"/api/overrides/player/{player_id}").json()
+        overrides = client.get(f"/api/overrides/overrides/player/{player_id}").json()
         assert not any(o["override_id"] == override_id for o in overrides)
 
 # For now, only include API route verification without complex batch operations

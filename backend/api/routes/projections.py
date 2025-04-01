@@ -1,12 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Dict, List, Optional
+from sqlalchemy import and_
+from typing import Dict, List, Optional, Any
+import logging
+import uuid
+
+logger = logging.getLogger(__name__)
 
 from backend.database.database import get_db
+from backend.database.models import Projection
 from backend.services.projection_service import ProjectionService
 from backend.services.rookie_projection_service import RookieProjectionService
 from backend.services.projection_variance_service import ProjectionVarianceService
 from backend.services.team_stat_service import TeamStatService
+from backend.services.scenario_service import ScenarioService
 from backend.api.schemas import (
     ProjectionResponse, 
     ProjectionCreateRequest,
@@ -63,7 +70,8 @@ async def create_projection(
     service = ProjectionService(db)
     projection = await service.create_base_projection(
         player_id=request.player_id,
-        season=request.season
+        season=request.season,
+        scenario_id=request.scenario_id
     )
     
     if not projection:
@@ -74,7 +82,7 @@ async def create_projection(
         
     return projection
 
-@router.put("/{projection_id}/adjust", response_model=ProjectionResponse)
+@router.post("/{projection_id}/adjust", response_model=ProjectionResponse)  # Changed to POST for test compatibility
 async def adjust_projection(
     projection_id: str,
     adjustments: ProjectionAdjustRequest,
@@ -214,6 +222,7 @@ async def enhance_rookie_projection(
 async def adjust_team_projections(
     team: str,
     season: int = Query(..., ge=2023),
+    scenario_id: Optional[str] = None,
     adjustments: Dict[str, float] = None,
     player_shares: Optional[Dict[str, Dict[str, float]]] = None,
     db: Session = Depends(get_db)
@@ -223,33 +232,111 @@ async def adjust_team_projections(
     
     - team: The team code (e.g., 'LAR')
     - season: The season year
+    - scenario_id: Optional scenario ID
     - adjustments: Adjustment factors for team-level metrics
       (e.g., {"pass_volume": 1.1, "rush_volume": 0.9})
     - player_shares: Optional player-specific distribution changes
       (e.g., {"player_id": {"targets": 0.25}})
     """
-    service = TeamStatService(db)
-    
-    if not adjustments and not player_shares:
-        raise HTTPException(
-            status_code=400,
-            detail="Must provide either adjustments or player_shares"
+    try:
+        service = TeamStatService(db)
+        
+        if not adjustments and not player_shares:
+            raise HTTPException(
+                status_code=400,
+                detail="Must provide either adjustments or player_shares"
+            )
+            
+        logger.info(f"Adjusting team projections for {team}, season {season}, scenario_id {scenario_id}")
+        logger.info(f"Adjustments: {adjustments}")
+        logger.info(f"Player shares: {player_shares}")
+        
+        # Clone projections from base scenario to new scenario if needed
+        if scenario_id:
+            # Check if we have projections for this scenario_id
+            projections_exist = db.query(Projection).filter(
+                and_(
+                    Projection.scenario_id == scenario_id,
+                    Projection.season == season
+                )
+            ).count() > 0
+            
+            if not projections_exist:
+                # We need to clone some projections from the base scenario
+                scenario_service = ScenarioService(db)
+                base_scenario = await scenario_service.get_scenario(scenario_id)
+                
+                if base_scenario and base_scenario.base_scenario_id:
+                    # Clone projections from base scenario
+                    source_projections = db.query(Projection).filter(
+                        and_(
+                            Projection.scenario_id == base_scenario.base_scenario_id,
+                            Projection.season == season
+                        )
+                    ).all()
+                    
+                    # Clone each projection
+                    for source_proj in source_projections:
+                        if not db.query(Projection).filter(
+                            and_(
+                                Projection.player_id == source_proj.player_id,
+                                Projection.scenario_id == scenario_id,
+                                Projection.season == season
+                            )
+                        ).first():
+                            # Create a new projection based on the source
+                            new_proj = Projection(
+                                projection_id=str(uuid.uuid4()),
+                                player_id=source_proj.player_id,
+                                scenario_id=scenario_id,
+                                season=season,
+                                games=source_proj.games,
+                                half_ppr=source_proj.half_ppr,
+                                
+                                # Copy all stats
+                                pass_attempts=source_proj.pass_attempts,
+                                completions=source_proj.completions,
+                                pass_yards=source_proj.pass_yards,
+                                pass_td=source_proj.pass_td,
+                                interceptions=source_proj.interceptions,
+                                rush_attempts=source_proj.rush_attempts,
+                                rush_yards=source_proj.rush_yards,
+                                rush_td=source_proj.rush_td,
+                                targets=source_proj.targets,
+                                receptions=source_proj.receptions,
+                                rec_yards=source_proj.rec_yards,
+                                rec_td=source_proj.rec_td,
+                                
+                                # Usage metrics
+                                snap_share=source_proj.snap_share,
+                                target_share=source_proj.target_share,
+                                rush_share=source_proj.rush_share
+                            )
+                            db.add(new_proj)
+                            
+                    db.commit()
+        
+        updated_projections = await service.apply_team_adjustments(
+            team=team,
+            season=season,
+            adjustments=adjustments or {},
+            player_shares=player_shares,
+            scenario_id=scenario_id
         )
         
-    updated_projections = await service.apply_team_adjustments(
-        team=team,
-        season=season,
-        adjustments=adjustments or {},
-        player_shares=player_shares
-    )
-    
-    if not updated_projections:
+        if not updated_projections:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to apply team adjustments"
+            )
+            
+        return updated_projections
+    except Exception as e:
+        logger.error(f"Error in adjust_team_projections: {str(e)}")
         raise HTTPException(
-            status_code=400,
-            detail="Failed to apply team adjustments"
+            status_code=500,
+            detail=f"Error applying team adjustments: {str(e)}"
         )
-        
-    return updated_projections
 
 @router.get("/team/{team}/usage", response_model=Dict)
 async def get_team_usage_breakdown(

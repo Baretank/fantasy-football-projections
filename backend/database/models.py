@@ -257,13 +257,13 @@ class Projection(Base):
                 'pass_yards': data.get('PaYD'),
                 'pass_td': data.get('PaTD'),
                 'interceptions': data.get('INT'),
-                'rush_attempts': data.get('Car') or data.get('RuATT'),
+                'rush_attempts': data.get('RuATT') or data.get('rush_attempts'),
                 'rush_yards': data.get('RuYD'),
                 'rush_td': data.get('RuTD')
             })
         elif data['Pos'] in ['RB', 'WR', 'TE']:
             base.update({
-                'rush_attempts': data.get('Car') or data.get('RuATT'),
+                'rush_attempts': data.get('RuATT') or data.get('rush_attempts'),
                 'rush_yards': data.get('RuYD'),
                 'rush_td': data.get('RuTD'),
                 'targets': data.get('Tar'),

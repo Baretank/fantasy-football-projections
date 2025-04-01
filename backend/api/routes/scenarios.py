@@ -15,7 +15,7 @@ from backend.services.scenario_service import ScenarioService
 import logging
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 
 @router.post(
     "/",
@@ -69,7 +69,8 @@ async def create_scenario(
         scenario = await scenario_service.create_scenario(
             name=request.name,
             description=request.description,
-            is_baseline=request.is_baseline
+            is_baseline=request.is_baseline,
+            base_scenario_id=request.base_scenario_id
         )
         
         if not scenario:

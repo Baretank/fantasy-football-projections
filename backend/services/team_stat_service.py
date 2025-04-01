@@ -6,7 +6,7 @@ import logging
 import uuid
 from datetime import datetime
 
-from backend.database.models import Player, TeamStat, Projection
+from backend.database.models import Player, TeamStat, Projection, Scenario
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +242,8 @@ class TeamStatService:
         team: str,
         season: int,
         adjustments: Dict[str, float],
-        player_shares: Optional[Dict[str, Dict[str, float]]] = None
+        player_shares: Optional[Dict[str, Dict[str, float]]] = None,
+        scenario_id: Optional[str] = None
     ) -> List[Projection]:
         """
         Apply team-level adjustments to all affected player projections.
@@ -253,6 +254,7 @@ class TeamStatService:
             adjustments: Dict of adjustment factors for team-level metrics
             player_shares: Optional dict of player-specific distribution changes
                            Format: {player_id: {metric: new_share}}
+            scenario_id: Optional scenario ID to filter projections
         
         Returns:
             List of updated projections
@@ -280,15 +282,173 @@ class TeamStatService:
             logger.info(f"Original pass_attempts: {team_stats.pass_attempts}")
             logger.info(f"Adjustment factor: {adjustments.get('pass_volume', 1.0)}")
             logger.info(f"Adjusted pass_attempts: {adjusted_team_stats.get('pass_attempts', 'Not set')}")
+            logger.info(f"team: {team}, season: {season}, scenario_id: {scenario_id}")
+            logger.info(f"adjustments: {adjustments}")
+            logger.info(f"player_shares: {player_shares}")
             
             # Get all player projections
             player_ids = [p.player_id for p in players]
-            projections = self.db.query(Projection).filter(
+            logger.debug(f"Player IDs: {player_ids}")
+            
+            # First check for any projections at all for these players
+            all_projections = self.db.query(Projection).filter(
                 and_(
                     Projection.player_id.in_(player_ids),
                     Projection.season == season
                 )
             ).all()
+            
+            for proj in all_projections:
+                logger.debug(f"Found projection: player_id={proj.player_id}, scenario_id={proj.scenario_id}")
+            
+            # Now filter by scenario_id
+            query = self.db.query(Projection).filter(
+                and_(
+                    Projection.player_id.in_(player_ids),
+                    Projection.season == season
+                )
+            )
+            
+            # Filter by scenario_id if provided
+            if scenario_id:
+                query = query.filter(Projection.scenario_id == scenario_id)
+                
+            projections = query.all()
+            
+            # Log for debugging
+            logger.info(f"Found {len(projections)} projections for team {team} in season {season} with scenario_id {scenario_id}")
+            
+            # If there are no projections and a scenario_id is provided, we need to clone from base projections
+            if len(projections) == 0 and scenario_id:
+                logger.info(f"No projections found for scenario_id {scenario_id}, cloning from base projections")
+                
+                # Try to find a source scenario to clone from
+                # First check if the scenario already has a base scenario ID
+                source_scenario = None
+                
+                if scenario_id:
+                    logger.debug(f"Looking up scenario with ID {scenario_id}")
+                    scenario = self.db.query(Scenario).filter(Scenario.scenario_id == scenario_id).first()
+                    if scenario:
+                        logger.debug(f"Found scenario: name={scenario.name}, base_scenario_id={scenario.base_scenario_id}")
+                        if scenario.base_scenario_id:
+                            source_scenario = scenario.base_scenario_id
+                            logger.info(f"Found base scenario {source_scenario} for scenario {scenario_id}")
+                    else:
+                        logger.debug(f"No scenario found with ID {scenario_id}")
+                
+                # Get the source projections to clone from 
+                # (either base scenario or projections with no scenario_id)
+                base_query = self.db.query(Projection).filter(
+                    and_(
+                        Projection.player_id.in_(player_ids),
+                        Projection.season == season
+                    )
+                )
+                
+                if source_scenario:
+                    # Use the base scenario_id as the source
+                    base_query = base_query.filter(Projection.scenario_id == source_scenario)
+                else:
+                    # If no base scenario, try to find projections with no scenario_id
+                    base_query = base_query.filter(Projection.scenario_id.is_(None))
+                
+                base_projections = base_query.all()
+                
+                logger.info(f"Found {len(base_projections)} base projections to clone")
+                
+                # Clone each projection with the new scenario_id
+                for base_proj in base_projections:
+                    player = next((p for p in players if p.player_id == base_proj.player_id), None)
+                    if not player:
+                        continue
+                    
+                    # Create a new projection for the scenario
+                    new_proj = Projection(
+                        projection_id=str(uuid.uuid4()),
+                        player_id=base_proj.player_id,
+                        scenario_id=scenario_id,
+                        season=season,
+                        games=base_proj.games,
+                        half_ppr=base_proj.half_ppr,
+                        
+                        # Copy all stats
+                        pass_attempts=base_proj.pass_attempts,
+                        completions=base_proj.completions,
+                        pass_yards=base_proj.pass_yards,
+                        pass_td=base_proj.pass_td,
+                        interceptions=base_proj.interceptions,
+                        rush_attempts=base_proj.rush_attempts,
+                        rush_yards=base_proj.rush_yards,
+                        rush_td=base_proj.rush_td,
+                        targets=base_proj.targets,
+                        receptions=base_proj.receptions,
+                        rec_yards=base_proj.rec_yards,
+                        rec_td=base_proj.rec_td,
+                        
+                        # Efficiency metrics
+                        pass_td_rate=base_proj.pass_td_rate,
+                        comp_pct=base_proj.comp_pct,
+                        yards_per_att=base_proj.yards_per_att,
+                        yards_per_carry=base_proj.yards_per_carry,
+                        rec_td_rate=base_proj.rec_td_rate,
+                        
+                        # Usage metrics
+                        snap_share=base_proj.snap_share,
+                        target_share=base_proj.target_share,
+                        rush_share=base_proj.rush_share,
+                        redzone_share=base_proj.redzone_share
+                    )
+                    
+                    self.db.add(new_proj)
+                
+                # Commit the new projections
+                try:
+                    self.db.commit()
+                    
+                    # Get the newly created projections
+                    projections = self.db.query(Projection).filter(
+                        and_(
+                            Projection.player_id.in_(player_ids),
+                            Projection.season == season,
+                            Projection.scenario_id == scenario_id
+                        )
+                    ).all()
+                    
+                    logger.info(f"Created {len(projections)} new projections for scenario_id {scenario_id}")
+                    
+                except Exception as e:
+                    logger.error(f"Error creating scenario projections: {str(e)}")
+                    self.db.rollback()
+                    return []
+            
+            # Calculate total pass attempts and targets to ensure we maintain the proper ratio
+            total_pass_attempts = sum(getattr(p, 'pass_attempts', 0) for p in projections if 
+                                     getattr(p, 'pass_attempts', 0) is not None)
+            total_targets = sum(getattr(p, 'targets', 0) for p in projections if 
+                               getattr(p, 'targets', 0) is not None)
+            
+            # If there's a severe mismatch in the targets to pass attempts ratio, fix it before adjustments
+            if total_pass_attempts > 0 and total_targets > 0:
+                ratio = total_targets / total_pass_attempts
+                logger.info(f"Current targets/pass_attempts ratio: {ratio}")
+                
+                # If targets are less than 80% of pass attempts, we need to adjust them
+                if ratio < 0.8:
+                    target_adjustment_factor = 0.9 / ratio  # Aim for 90% of pass attempts
+                    logger.info(f"Adjusting all targets by factor: {target_adjustment_factor}")
+                    
+                    # Apply the adjustment to all targets
+                    for proj in projections:
+                        player = next((p for p in players if p.player_id == proj.player_id), None)
+                        if player and player.position in ['RB', 'WR', 'TE'] and proj.targets is not None:
+                            proj.targets *= target_adjustment_factor
+                            if proj.receptions is not None:
+                                proj.receptions *= target_adjustment_factor
+                            if proj.rec_yards is not None:
+                                proj.rec_yards *= target_adjustment_factor
+                            if proj.rec_td is not None:
+                                proj.rec_td *= target_adjustment_factor
             
             # We'll create a list to store the updated projections
             updated_projections = []
@@ -302,38 +462,50 @@ class TeamStatService:
                 # Make a debug log to see starting values
                 logger.info(f"Before adjustment - Player: {player.name}, Pass attempts: {proj.pass_attempts}")
                 
+                # Ensure no None values that would cause TypeError
+                # Assign default values to all numeric fields that might be None
+                for field in ['pass_attempts', 'completions', 'pass_yards', 'pass_td', 
+                            'rush_attempts', 'rush_yards', 'rush_td', 'interceptions',
+                            'targets', 'receptions', 'rec_yards', 'rec_td']:
+                    if getattr(proj, field, None) is None:
+                        logger.warning(f"Fixing None value for {field} in projection for {player.name}")
+                        setattr(proj, field, 0)
+                
                 # QB adjustments
                 if player.position == 'QB':
-                    # Pass volume adjustments
-                    if 'pass_volume' in adjustments and proj.pass_attempts:
+                    # Pass volume adjustments - with None protection
+                    if 'pass_volume' in adjustments and proj.pass_attempts is not None and proj.pass_attempts > 0:
                         volume_factor = adjustments['pass_volume']
                         proj.pass_attempts *= volume_factor
-                        if proj.completions:
+                        
+                        if proj.completions is not None:
                             proj.completions *= volume_factor
-                        if proj.pass_yards:
+                            
+                        if proj.pass_yards is not None:
                             proj.pass_yards *= volume_factor
                     
-                    # Scoring rate adjustments - apply even if pass_volume isn't adjusted
-                    if 'scoring_rate' in adjustments and proj.pass_td:
+                    # Scoring rate adjustments - with None protection
+                    if 'scoring_rate' in adjustments and proj.pass_td is not None:
                         scoring_factor = adjustments['scoring_rate']
                         proj.pass_td *= scoring_factor
                 
-                # Apply rushing adjustments for all positions
-                if proj.rush_attempts:
+                # Apply rushing adjustments for all positions - with None protection
+                if proj.rush_attempts is not None and proj.rush_attempts > 0:
                     # Rush volume adjustments
                     if 'rush_volume' in adjustments:
                         volume_factor = adjustments['rush_volume']
                         proj.rush_attempts *= volume_factor
-                        if proj.rush_yards:
+                        
+                        if proj.rush_yards is not None:
                             proj.rush_yards *= volume_factor
                     
-                    # Scoring rate adjustments - apply even if rush_volume isn't adjusted
-                    if 'scoring_rate' in adjustments and proj.rush_td:
+                    # Scoring rate adjustments - with None protection
+                    if 'scoring_rate' in adjustments and proj.rush_td is not None:
                         scoring_factor = adjustments['scoring_rate']
                         proj.rush_td *= scoring_factor
                 
-                # Apply receiving adjustments for RB, WR, TE
-                if player.position in ['RB', 'WR', 'TE'] and proj.targets:
+                # Apply receiving adjustments for RB, WR, TE - with None protection
+                if player.position in ['RB', 'WR', 'TE'] and proj.targets is not None and proj.targets > 0:
                     # Apply player-specific share adjustments if defined
                     player_factor = 1.0
                     if player_shares and player.player_id in player_shares:
@@ -344,20 +516,25 @@ class TeamStatService:
                     if 'pass_volume' in adjustments:
                         volume_factor = adjustments['pass_volume'] * player_factor
                         proj.targets *= volume_factor
-                        if proj.receptions:
+                        
+                        if proj.receptions is not None:
                             proj.receptions *= volume_factor
-                        if proj.rec_yards:
+                            
+                        if proj.rec_yards is not None:
                             proj.rec_yards *= volume_factor
+                            
                     elif player_factor != 1.0:
-                        # Apply target share adjustment even without pass volume adjustment
+                        # Apply target share adjustment without pass volume adjustment
                         proj.targets *= player_factor
-                        if proj.receptions:
+                        
+                        if proj.receptions is not None:
                             proj.receptions *= player_factor
-                        if proj.rec_yards:
+                            
+                        if proj.rec_yards is not None:
                             proj.rec_yards *= player_factor
                     
-                    # Scoring rate adjustments - apply regardless of other adjustments
-                    if 'scoring_rate' in adjustments and proj.rec_td:
+                    # Scoring rate adjustments - with None protection
+                    if 'scoring_rate' in adjustments and proj.rec_td is not None:
                         scoring_factor = adjustments['scoring_rate']
                         proj.rec_td *= scoring_factor
                 
@@ -368,6 +545,35 @@ class TeamStatService:
                 logger.info(f"After adjustment - Player: {player.name}, Pass attempts: {proj.pass_attempts}")
                 
                 updated_projections.append(proj)
+            
+            # Final check and adjustment of targets-to-pass attempts ratio
+            adjusted_pass_attempts = sum(getattr(p, 'pass_attempts', 0) for p in updated_projections if 
+                                        getattr(p, 'pass_attempts', 0) is not None)
+            adjusted_targets = sum(getattr(p, 'targets', 0) for p in updated_projections if 
+                                  getattr(p, 'targets', 0) is not None)
+            
+            if adjusted_pass_attempts > 0 and adjusted_targets > 0:
+                final_ratio = adjusted_targets / adjusted_pass_attempts
+                logger.info(f"Final targets/pass_attempts ratio: {final_ratio}")
+                
+                # If outside reasonable bounds, do one last correction
+                if final_ratio < 0.8 or final_ratio > 1.2:
+                    target_correction = 0.9 / final_ratio  # Aim for a ratio of 0.9
+                    logger.info(f"Final target correction factor: {target_correction}")
+                    
+                    # Apply the correction
+                    for proj in updated_projections:
+                        player = next((p for p in players if p.player_id == proj.player_id), None)
+                        if player and player.position in ['RB', 'WR', 'TE'] and proj.targets is not None:
+                            proj.targets *= target_correction
+                            if proj.receptions is not None:
+                                proj.receptions *= target_correction
+                            if proj.rec_yards is not None:
+                                proj.rec_yards *= target_correction
+                            if proj.rec_td is not None:
+                                proj.rec_td *= target_correction
+                            # Recalculate fantasy points after correction
+                            proj.half_ppr = proj.calculate_fantasy_points()
             
             # Save all changes
             self.db.commit()

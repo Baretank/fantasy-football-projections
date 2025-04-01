@@ -14,7 +14,7 @@ from backend.services.override_service import OverrideService
 import logging
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(prefix="/overrides", tags=["overrides"])
 
 @router.post(
     "/",

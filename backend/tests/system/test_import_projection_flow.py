@@ -874,3 +874,10 @@ class TestImportProjectionFlow:
                         print(f"  {position} ({player.name}): {len(pos_projections)} projections, avg {sample.half_ppr} fantasy points")
                     else:
                         print(f"  WARNING: No projections found for position {position}")
+                
+                # Verify that fantasy points were calculated
+                for proj in projections:
+                    player = test_db.query(Player).filter(Player.player_id == proj.player_id).first()
+                    assert proj.half_ppr > 0, f"Fantasy points not calculated for {player.name} ({player.position})"
+                
+                print("Complete flow test successful!")

@@ -26,7 +26,8 @@ class ScenarioService:
         self, 
         name: str, 
         description: Optional[str] = None,
-        is_baseline: bool = False
+        is_baseline: bool = False,
+        base_scenario_id: Optional[str] = None
     ) -> Optional[Scenario]:
         """
         Create a new projection scenario.
@@ -35,6 +36,7 @@ class ScenarioService:
             name: Scenario name
             description: Optional description
             is_baseline: Whether this is a baseline scenario
+            base_scenario_id: Optional base scenario ID
             
         Returns:
             Created Scenario object or None if failed
@@ -44,7 +46,8 @@ class ScenarioService:
                 scenario_id=str(uuid.uuid4()),
                 name=name,
                 description=description,
-                is_baseline=is_baseline
+                is_baseline=is_baseline,
+                base_scenario_id=base_scenario_id
             )
             
             self.db.add(scenario)

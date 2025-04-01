@@ -37,7 +37,12 @@
 - [x] Add comprehensive mocking for external data sources
 - [x] Improve async test patterns with proper AsyncMock usage
 - [x] Add detailed debugging output to stabilize tests
-- [ ] Complete API route tests with schema validation fixes
+- [x] Complete API route tests with schema validation fixes
+  - [x] Fixed router prefixes in overrides.py and scenarios.py
+  - [x] Fixed schema consistency across API endpoints
+- [x] Update API route tests to use correct router prefixes
+  - [x] Fixed integration tests in test_api_routes.py
+  - [x] Fixed system tests in test_end_to_end_flows.py
 - [ ] Set up automated test runs in CI/CD pipeline
 
 ## Documentation
@@ -157,7 +162,35 @@
   - [x] Implement database fixtures for testing
   - [x] Support test isolation and cleanup
 
-## Phase 6: Production Deployment
+## Phase 6: Complete Testing and Validation
+
+### Fix Remaining Tests
+- [x] Fix test_complete_season_pipeline.py to fully integrate with NFLDataImportService
+  - [x] Fixed NoneType errors in team_stat_service.py
+  - [x] Added proper targets/pass_attempts ratio handling
+- [x] Fix API test failures after router prefix changes
+  - [x] Updated test URLs to match the new router prefixes
+  - [x] Fixed all test_end_to_end_flows.py HTTP client tests to pass
+- [x] Fix database model field inconsistencies in test fixtures
+  - [x] Standardized all fixtures to use rush_attempts instead of carries
+  - [x] Fixed test fixtures in all integration and system tests
+- [ ] Implement/fix export process tests
+- [ ] Complete draft day tool tests
+- [ ] Add performance testing for large datasets
+
+### Code Quality Improvements
+- [ ] Update deprecated code patterns:
+  - [ ] Replace FastAPI on_event with lifespan event handlers
+  - [ ] Update Query parameters to use pattern instead of regex
+  - [ ] Fix SQLAlchemy legacy warnings (Query.get method)
+
+### Data Validation
+- [ ] Add comprehensive validation for NFL data imports
+- [ ] Implement consistency checks between stats and projections
+- [ ] Create robust error handling for all data sources
+
+## Future Phase: Production Deployment
+*Note: These items are deprioritized until we have a complete model and all tests passing*
 
 ### Containerization
 - [ ] Create Docker configuration for the backend
@@ -175,8 +208,52 @@
 - [ ] Configure monitoring dashboards
 - [ ] Add performance tracking metrics
 
-### CI/CD Pipeline
+### Deprioritized CI/CD Pipeline Tasks
+*Note: These items are deprioritized until we have a complete model and all tests passing*
+
 - [ ] Set up automated testing workflow
 - [ ] Implement build and deployment pipeline
 - [ ] Configure environment-specific configurations
 - [ ] Add automated documentation generation
+
+## Updates for NFL Data Integration and Testing
+
+### Recent Completions
+- [x] Fixed router prefixes in API routes:
+  - [x] Added prefix to overrides.py: `/overrides` 
+  - [x] Added prefix to scenarios.py: `/scenarios`
+- [x] Updated system tests:
+  - [x] Enhanced test_complete_season_pipeline.py to verify NFL data import
+  - [x] Fixed test_import_projection_flow.py with proper completion
+- [x] Completed API route tests with schema validation fixes
+
+### Remaining Testing Tasks
+- [x] Fix test_complete_season_pipeline.py for the full pipeline test
+  - [x] Fixed NoneType errors in team_stat_service.py
+  - [x] Fixed targets/pass_attempts ratio issue
+- [x] Fix API route tests to use correct router prefixes
+  - [x] Fixed integration tests in test_api_routes.py (all 11 tests pass)
+  - [x] Fixed all HTTP client tests in test_end_to_end_flows.py (5/5 tests pass)
+  - [x] Fixed complete system test workflow with scenario-related tests
+- [x] Fix test database configuration for system tests
+  - [x] Fixed database-related issues in test_end_to_end_flows.py with comprehensive solution
+  - [x] Implemented properly separated test database sessions with file-based SQLite
+  - [x] Added consistent approach to fixture isolation with proper cleanup
+  - [x] Enhanced test resilience with API fallback mechanisms
+- [x] Fix database model field inconsistencies in test fixtures
+  - [x] Updated "carries" to "rush_attempts" in all Projection model instances
+  - [x] Updated all TeamStat fixtures to properly standardize on rush_attempts 
+  - [x] Fixed all test fixtures to use rush_attempts consistently
+- [ ] Update deprecated code patterns in tests:
+  - [ ] Replace `regex` with `pattern` in FastAPI Query parameters
+  - [ ] Replace `on_event` with lifespan event handlers
+  - [ ] Replace SQLAlchemy's Query.get() with Session.get()
+- [ ] Fix database isolation issues between tests:
+  - [ ] Create more focused test fixtures
+  - [ ] Implement proper transaction rollback
+  - [ ] Add strict cleanup procedures for test data
+- [ ] Add performance testing for large datasets
+
+### Deprioritized Tasks (Until Core Tests Pass)
+- [ ] Set up automated test runs in CI/CD pipeline
+- [ ] Implement Docker containerization

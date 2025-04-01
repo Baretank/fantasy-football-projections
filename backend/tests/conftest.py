@@ -197,7 +197,6 @@ def team_stats_2024(test_db):
         rush_attempts=400,           # Changed to match total
         rush_yards=1600,
         rush_td=19,
-        carries=400,                 # Same as rush_attempts
         rush_yards_per_carry=4.0,    # 1600/400
         targets=600,                 # Same as pass_attempts
         receptions=390,

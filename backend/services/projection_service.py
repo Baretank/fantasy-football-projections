@@ -55,7 +55,7 @@ class ProjectionService:
                 
         return query.all()
 
-    async def create_base_projection(self, player_id: str, season: int) -> Optional[Projection]:
+    async def create_base_projection(self, player_id: str, season: int, scenario_id: Optional[str] = None) -> Optional[Projection]:
         """Create baseline projection from historical data."""
         try:
             # Get player and their historical stats
@@ -84,6 +84,10 @@ class ProjectionService:
             )
             
             if projection:
+                # Set scenario_id if provided
+                if scenario_id:
+                    projection.scenario_id = scenario_id
+                
                 self.db.add(projection)
                 self.db.commit()
                 
