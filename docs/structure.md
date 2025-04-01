@@ -41,7 +41,7 @@ fantasy-football-projections/
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── projection_service.py     # Projection calculations
-│   │   ├── data_import_service.py    # Data import handling
+│   │   ├── nfl_data_import_service.py # NFL data import handling
 │   │   ├── data_service.py           # Data retrieval
 │   │   ├── data_validation.py        # Data validation
 │   │   ├── team_stat_service.py      # Team statistics
@@ -52,8 +52,11 @@ fantasy-football-projections/
 │   │   ├── query_service.py          # Optimized database queries
 │   │   ├── player_import_service.py  # Player import functionality
 │   │   ├── rookie_import_service.py  # Rookie import functionality
-│   │   ├── rookie_projection_service.py  # Rookie projections
-│   │   └── projection_variance_service.py # Projection uncertainty
+│   │   ├── rookie_projection_service.py # Rookie projections
+│   │   ├── projection_variance_service.py # Projection uncertainty
+│   │   └── adapters/                  # Data source adapters
+│   │       ├── nfl_data_py_adapter.py # Adapter for nfl_data_py library
+│   │       └── nfl_api_adapter.py     # Adapter for NFL API
 │   └── tests/
 │       ├── __init__.py
 │       ├── conftest.py            # Test fixtures
@@ -63,7 +66,7 @@ fantasy-football-projections/
 │       │   ├── test_data_service.py
 │       │   ├── test_team_stat_service.py
 │       │   ├── test_data_validation.py
-│       │   ├── test_data_import_service.py
+│       │   ├── test_nfl_data_import_service.py
 │       │   ├── test_data_import_transformations.py
 │       │   ├── test_external_response_handling.py
 │       │   ├── test_override_service.py
@@ -73,7 +76,8 @@ fantasy-football-projections/
 │       │   └── test_batch_import_functionality.py
 │       ├── integration/           # Integration tests
 │       │   ├── __init__.py
-│       │   └── test_projection_pipeline.py
+│       │   ├── test_projection_pipeline.py
+│       │   └── test_nfl_data_integration.py
 │       └── system/                # System tests
 │           ├── __init__.py
 │           ├── test_end_to_end_flows.py
@@ -132,8 +136,8 @@ fantasy-football-projections/
 ├── docs/
 │   ├── Structure.md          # This document
 │   ├── Model.md              # Projection model docs
-│   ├── PFR Docs.md           # Pro Football Reference details
-│   ├── Rate Limiting.md      # Rate limiting implementation details
+│   ├── nfl_data_integration.md # NFL data integration technical details
+│   ├── nfl_data_import.md     # NFL data import user guide
 │   ├── api_docs.md           # Comprehensive API documentation
 │   ├── developer_setup.md    # Developer environment setup guide
 │   └── user_guide.md         # User manual for the application
@@ -160,7 +164,7 @@ fantasy-football-projections/
 ### Services (`/backend/services/`)
 
 - **DataService**: Player and statistical data retrieval
-- **DataImportService**: Data import from external sources
+- **NFLDataImportService**: NFL data import from multiple sources with adapters
 - **DataValidationService**: Data validation and verification
 - **ProjectionService**: Core projection calculations
 - **TeamStatService**: Team-level statistics management
@@ -242,7 +246,7 @@ fantasy-football-projections/
 
 ### Import and Validation
 
-- Rate-limited web scraping
+- NFL data integration with official APIs
 - Data validation and verification
 - Exponential backoff for external APIs
 - Batch processing with configurable settings

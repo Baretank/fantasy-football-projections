@@ -1,10 +1,19 @@
 # Fantasy Football Projections - Claude Guide
 
+> **IMPORTANT**: When running specific PyTest commands, always use quotation marks around test paths to avoid path resolution issues:
+> ```
+> # CORRECT:
+> cd backend && python -m pytest "tests/path/to/test_file.py::TestClass::test_method" -v
+> 
+> # INCORRECT (will cause path resolution issues):
+> cd backend && python -m pytest tests/path/to/test_file.py::TestClass::test_method -v
+> ```
+
 ## Commands
 - **Backend**: `cd backend && uvicorn main:app --reload`
 - **Frontend**: `cd frontend && npm run dev`
 - **Tests**: `cd backend && python -m pytest tests/`
-- **Single Test**: `cd backend && python -m pytest tests/path/to/test_file.py::TestClass::test_method -v`
+- **Single Test**: `cd backend && python -m pytest "tests/path/to/test_file.py::TestClass::test_method" -v`  # Note the quotation marks
 - **Lint (Frontend)**: `npm run lint`
 - **Build (Frontend)**: `npm run build`
 
@@ -220,5 +229,4 @@ fantasy-football-projections/
 │   │   └── utils/           # Helper functions
 │   └── public/              # Static assets
 └── data/                    # Local database and data files
-```
 ```

@@ -16,7 +16,7 @@ A modern web application for creating and managing fantasy football player proje
 - **Granular Controls**: Fine-tune individual player metrics and see real-time impacts
 - **Batch Operations**: Apply changes to multiple players simultaneously
 - **Modern Interface**: Intuitive React-based UI with real-time updates
-- **Data Import Verification**: Robust validation for imported statistical data
+- **NFL Data Integration**: Comprehensive NFL data import from official NFL API and nfl_data_py with robust validation
 - **Performance Optimization**: Caching and query optimization for fast response times
 
 ## 🚀 Getting Started
@@ -53,10 +53,10 @@ cd frontend
 npm install
 ```
 
-5. Optional: Import sample data:
+5. Optional: Import NFL data for analysis:
 ```bash
 cd backend/scripts
-python upload_season.py --season 2024 --verify
+python import_nfl_data.py --seasons 2023 --type full
 ```
 
 ### Running the Application
@@ -174,7 +174,7 @@ npm test
 - Technical implementation details: See `docs/model.md`
 - Database schema and models: See `backend/database/models.py`
 - Project structure: See `docs/structure.md`
-- Data import details: See `docs/Data Import Plan.md`
+- NFL data import system: See `backend/nfl_data_integration.md`
 
 ## 🤝 Contributing
 
@@ -197,7 +197,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - **Side-by-Side Comparison**: Advanced player comparison tool with multiple visualization options
 - **Enhanced Dashboard**: Improved analytics dashboard with key performance indicators
 - **Modern Navigation**: Comprehensive navigation structure with improved UX
-- **Data Validation**: Robust validation and error correction for imported data
+- **NFL Data Integration**: New NFL data import system using official NFL API and nfl_data_py instead of web scraping
 - **Performance Optimization**: Caching and query optimization for faster response times
 - **Batch API Operations**: Enhanced batch operations for projection management
 - **Data Export**: Export capabilities for projections in multiple formats
@@ -216,13 +216,14 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ### Current Limitations
 - Single-user system (no authentication)
 - Local SQLite database only
-- Limited historical data import options
+- Limited historical data coverage (working on expanding)
 - Limited mobile responsiveness
 
 ### Recently Completed Features
 - ✅ Enhanced rookie projection system
 - ✅ Statistical variance and confidence intervals
-- ✅ Data validation for imports
+- ✅ Complete NFL data integration with NFL API and nfl_data_py
+- ✅ Removal of web scraping dependencies for improved reliability
 - ✅ Side-by-side player comparison
 - ✅ Dashboard analytics view
 - ✅ Modern navigation structure

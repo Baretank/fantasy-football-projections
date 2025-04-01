@@ -46,23 +46,88 @@ python backend/database/init_db.py
 
 This script creates the SQLite database and initializes the schema.
 
-### 4. Import Sample Data (Optional)
+### 4. Setup NFL Data Sources
 
-To populate the database with sample data for development:
+The application uses the `nfl_data_py` package and official NFL APIs for importing NFL data. We've created a setup script that will verify and install all required dependencies:
 
 ```bash
 cd backend/scripts
-python upload_season.py --season 2024 --verify
+python setup_nfl_data.py
 ```
 
-### 5. Start the Backend Server
+This script will:
+1. Check if `nfl_data_py` and `aiohttp` packages are installed
+2. Update your conda environment if needed
+3. Install any missing dependencies
+4. Provide instructions for importing NFL data
+
+### 5. Import NFL Data (Optional)
+
+To populate the database with real NFL data for development:
+
+```bash
+cd backend/scripts
+python import_nfl_data.py --seasons 2023 --type full
+```
+
+This will use the NFLDataImportService to import data from NFL sources. The first run may take some time as it downloads and processes all data for the season.
+
+You can also import specific data types:
+```bash
+# Import only player data
+python import_nfl_data.py --seasons 2023 --type players
+
+# Import only weekly stats
+python import_nfl_data.py --seasons 2023 --type weekly
+
+# Import only team stats
+python import_nfl_data.py --seasons 2023 --type team
+
+# Calculate season totals from weekly data
+python import_nfl_data.py --seasons 2023 --type totals
+
+# Validate imported data
+python import_nfl_data.py --seasons 2023 --type validate
+```
+
+You can monitor the import process through:
+1. Console output: Provides real-time feedback during imports
+2. Log file: Detailed logs are saved to `nfl_data_import.log`
+3. Database logging: Import operations are logged to the `import_logs` table
+4. Metrics tracking: Request counts, errors, and processing times are tracked
+
+### 5.1 NFL Data Import Architecture
+
+The NFL data import system uses a modular adapter-based architecture:
+
+1. **Data Source Adapters**:
+   - `NFLDataPyAdapter`: Interface to the nfl-data-py Python package
+   - `NFLApiAdapter`: Interface to the official NFL API with rate limiting
+   - `WebDataAdapter`: For testing and fallback options
+
+2. **Core Import Service**:
+   - `NFLDataImportService`: Main service that coordinates data import and processing
+
+3. **API Endpoints**:
+   - `/batch/import/nfl-data/{season}`: Full endpoint for importing NFL data
+   - Supports background processing of long-running imports
+
+For testing the NFL data import system:
+```bash
+# Run NFL data-specific tests
+python -m pytest "tests/unit/test_nfl_data_import_service.py" -v
+python -m pytest "tests/integration/test_nfl_data_integration.py" -v
+python -m pytest "tests/system/test_import_projection_flow.py" -v
+```
+
+### 6. Start the Backend Server
 
 ```bash
 cd backend
 uvicorn main:app --reload
 ```
 
-The backend API will be available at `http://localhost:8000`.
+The backend API will be available at `http://localhost:8000` and the interactive API documentation at `http://localhost:8000/docs`.
 
 ## Frontend Setup
 
@@ -100,11 +165,31 @@ The frontend application will be available at `http://localhost:5173`.
    - Business logic is implemented in service classes in `backend/services/`
    - API endpoints are defined in `backend/api/routes/`
    - Schemas are defined in `backend/api/schemas.py`
+   - Data source adapters are in `backend/services/adapters/`
+   - Import services are in `backend/services/`
+   - Command-line tools are in `backend/scripts/`
 
 2. **Running Tests**
    ```bash
+   # Run all tests
    cd backend
    python -m pytest tests/
+   
+   # Run specific test categories
+   python -m pytest tests/unit/
+   python -m pytest tests/integration/
+   python -m pytest tests/system/
+   
+   # Run NFL data import tests specifically
+   python -m pytest "tests/unit/test_nfl_data_import_service.py" -v
+   python -m pytest "tests/unit/test_external_response_handling.py" -v
+   python -m pytest "tests/unit/test_rate_limiting.py" -v
+   python -m pytest "tests/unit/test_position_import_accuracy.py" -v
+   python -m pytest "tests/integration/test_nfl_data_integration.py" -v
+   python -m pytest "tests/system/test_import_projection_flow.py" -v
+   
+   # Use the run_tests.sh script for specific test categories
+   ./tests/system/run_tests.sh import    # Run import-related system tests
    ```
 
 3. **Adding a New Endpoint**
@@ -220,6 +305,14 @@ The application doesn't currently use environment variables, but a `.env` file s
    - Validate request schemas
    - Look for missing dependencies
 
+3. **NFL Data Import Issues**
+   - Install required packages with `python setup_nfl_data.py`
+   - Check if the nfl-data-py package is installed and working
+   - Verify internet connectivity for external API calls
+   - Check for rate limiting issues in the console output or logs
+   - Examine the import logs in the database for detailed error information
+   - For testing issues, ensure test fixtures and mocks are properly set up
+
 ### Common Frontend Issues
 
 1. **Dependency Issues**
@@ -244,3 +337,6 @@ The application doesn't currently use environment variables, but a `.env` file s
 - [TypeScript Documentation](https://www.typescriptlang.org/docs/)
 - [Vite Documentation](https://vitejs.dev/guide/)
 - [TailwindCSS Documentation](https://tailwindcss.com/docs)
+- [NFL Data PY Documentation](https://pypi.org/project/nfl-data-py/)
+- [NFL API Resources](https://gist.github.com/nntrn/ee26cb2a0716de0947a0a4e9a157bc1c)
+- [NFL Fantasy Data Fields Reference](https://api.fantasy.nfl.com/v2/docs)
