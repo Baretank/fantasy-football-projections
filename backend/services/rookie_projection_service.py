@@ -355,7 +355,7 @@ class RookieProjectionService:
                     projection.yards_per_carry = projection.rush_yards / projection.rush_attempts
                     
             elif player.position in ["RB", "WR", "TE"]:
-                projection.rush_attempts = projected_stats.get("rush_attempts", 0) or projected_stats.get("carries", 0)
+                projection.rush_attempts = projected_stats.get("rush_attempts", 0) or projected_stats.get("rush_attempts", 0)
                 projection.rush_yards = projected_stats.get("rush_yards", 0)
                 projection.rush_td = projected_stats.get("rush_td", 0)
                 projection.targets = projected_stats.get("targets", 0)
@@ -401,8 +401,8 @@ class RookieProjectionService:
                     projection.rush_td = projected_stats["rush_td"]
                     
             elif player.position in ["RB", "WR", "TE"]:
-                if "carries" in projected_stats or "rush_attempts" in projected_stats:
-                    projection.rush_attempts = projected_stats.get("rush_attempts", projected_stats.get("carries", projection.rush_attempts))
+                if "rush_attempts" in projected_stats or "rush_attempts" in projected_stats:
+                    projection.rush_attempts = projected_stats.get("rush_attempts", projected_stats.get("rush_attempts", projection.rush_attempts))
                 if "rush_yards" in projected_stats:
                     projection.rush_yards = projected_stats["rush_yards"]
                 if "rush_td" in projected_stats:

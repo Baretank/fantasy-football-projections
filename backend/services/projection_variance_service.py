@@ -25,12 +25,12 @@ class ProjectionVarianceService:
                 'pass_yards': 0.18,
                 'pass_td': 0.25,
                 'interceptions': 0.35,
-                'carries': 0.30,
+                'rush_attempts': 0.30,
                 'rush_yards': 0.35,
                 'rush_td': 0.50
             },
             'RB': {
-                'carries': 0.18,
+                'rush_attempts': 0.18,
                 'rush_yards': 0.22,
                 'rush_td': 0.40,
                 'targets': 0.25,
@@ -43,7 +43,7 @@ class ProjectionVarianceService:
                 'receptions': 0.25,
                 'rec_yards': 0.30,
                 'rec_td': 0.45,
-                'carries': 0.50,
+                'rush_attempts': 0.50,
                 'rush_yards': 0.50,
                 'rush_td': 0.70
             },
@@ -52,7 +52,7 @@ class ProjectionVarianceService:
                 'receptions': 0.30,
                 'rec_yards': 0.35,
                 'rec_td': 0.50,
-                'carries': 0.80,
+                'rush_attempts': 0.80,
                 'rush_yards': 0.80,
                 'rush_td': 0.95
             }
@@ -279,7 +279,7 @@ class ProjectionVarianceService:
                 pass_yards = [float(g.stats.get('pass_yds', 0)) for g in game_stats if 'pass_yds' in g.stats]
                 pass_td = [float(g.stats.get('pass_td', 0)) for g in game_stats if 'pass_td' in g.stats]
                 interceptions = [float(g.stats.get('int', 0)) for g in game_stats if 'int' in g.stats]
-                carries = [float(g.stats.get('rush_att', 0)) for g in game_stats if 'rush_att' in g.stats]
+                rush_attempts = [float(g.stats.get('rush_att', 0)) for g in game_stats if 'rush_att' in g.stats]
                 rush_yards = [float(g.stats.get('rush_yds', 0)) for g in game_stats if 'rush_yds' in g.stats]
                 rush_td = [float(g.stats.get('rush_td', 0)) for g in game_stats if 'rush_td' in g.stats]
                 
@@ -294,8 +294,8 @@ class ProjectionVarianceService:
                     variance_model['pass_td'] = np.std(pass_td) / max(1, np.mean(pass_td))
                 if interceptions and len(interceptions) >= 8:
                     variance_model['interceptions'] = np.std(interceptions) / max(1, np.mean(interceptions))
-                if carries and len(carries) >= 8:
-                    variance_model['carries'] = np.std(carries) / max(1, np.mean(carries))
+                if rush_attempts and len(rush_attempts) >= 8:
+                    variance_model['rush_attempts'] = np.std(rush_attempts) / max(1, np.mean(rush_attempts))
                 if rush_yards and len(rush_yards) >= 8:
                     variance_model['rush_yards'] = np.std(rush_yards) / max(1, np.mean(rush_yards))
                 if rush_td and len(rush_td) >= 8:
@@ -303,7 +303,7 @@ class ProjectionVarianceService:
                 
             elif player.position in ["RB", "WR", "TE"]:
                 # Calculate variance for RB/WR/TE stats
-                carries = [float(g.stats.get('rush_att', 0)) for g in game_stats if 'rush_att' in g.stats]
+                rush_attempts = [float(g.stats.get('rush_att', 0)) for g in game_stats if 'rush_att' in g.stats]
                 rush_yards = [float(g.stats.get('rush_yds', 0)) for g in game_stats if 'rush_yds' in g.stats]
                 rush_td = [float(g.stats.get('rush_td', 0)) for g in game_stats if 'rush_td' in g.stats]
                 targets = [float(g.stats.get('tgt', 0)) for g in game_stats if 'tgt' in g.stats]
@@ -312,8 +312,8 @@ class ProjectionVarianceService:
                 rec_td = [float(g.stats.get('rec_td', 0)) for g in game_stats if 'rec_td' in g.stats]
                 
                 # Calculate coefficient of variation for each stat if we have enough data
-                if carries and len(carries) >= 8:
-                    variance_model['carries'] = np.std(carries) / max(1, np.mean(carries))
+                if rush_attempts and len(rush_attempts) >= 8:
+                    variance_model['rush_attempts'] = np.std(rush_attempts) / max(1, np.mean(rush_attempts))
                 if rush_yards and len(rush_yards) >= 8:
                     variance_model['rush_yards'] = np.std(rush_yards) / max(1, np.mean(rush_yards))
                 if rush_td and len(rush_td) >= 8:
@@ -499,7 +499,7 @@ class ProjectionVarianceService:
             pass_yards=projection.pass_yards,
             pass_td=projection.pass_td,
             interceptions=projection.interceptions,
-            carries=projection.carries,
+            rush_attempts=projection.rush_attempts,
             rush_yards=projection.rush_yards,
             rush_td=projection.rush_td,
             targets=projection.targets,
@@ -524,11 +524,11 @@ class ProjectionVarianceService:
         if position == 'QB':
             return base_fields + [
                 'pass_attempts', 'completions', 'pass_yards', 'pass_td',
-                'interceptions', 'carries', 'rush_yards', 'rush_td'
+                'interceptions', 'rush_attempts', 'rush_yards', 'rush_td'
             ]
         elif position in ['RB', 'WR', 'TE']:
             fields = base_fields + [
-                'carries', 'rush_yards', 'rush_td',
+                'rush_attempts', 'rush_yards', 'rush_td',
                 'targets', 'receptions', 'rec_yards', 'rec_td'
             ]
             
@@ -557,19 +557,19 @@ class ProjectionVarianceService:
                 ('completions', 'pass_td'): 0.78,
                 ('pass_yards', 'pass_td'): 0.80,
                 ('rush_yards', 'rush_td'): 0.60,
-                ('carries', 'rush_yards'): 0.95,
-                ('carries', 'rush_td'): 0.55
+                ('rush_attempts', 'rush_yards'): 0.95,
+                ('rush_attempts', 'rush_td'): 0.55
             }
         elif position == 'RB':
             return {
-                ('carries', 'rush_yards'): 0.98,
-                ('carries', 'rush_td'): 0.75,
+                ('rush_attempts', 'rush_yards'): 0.98,
+                ('rush_attempts', 'rush_td'): 0.75,
                 ('rush_yards', 'rush_td'): 0.70,
                 ('targets', 'receptions'): 0.95,
                 ('receptions', 'rec_yards'): 0.97,
                 ('receptions', 'rec_td'): 0.60,
                 ('rec_yards', 'rec_td'): 0.65,
-                ('carries', 'targets'): -0.20,  # Slight negative correlation
+                ('rush_attempts', 'targets'): -0.20,  # Slight negative correlation
                 ('rush_yards', 'rec_yards'): -0.15
             }
         elif position in ['WR', 'TE']:
@@ -580,7 +580,7 @@ class ProjectionVarianceService:
                 ('receptions', 'rec_yards'): 0.95,
                 ('receptions', 'rec_td'): 0.70,
                 ('rec_yards', 'rec_td'): 0.75,
-                ('carries', 'rush_yards'): 0.90,
+                ('rush_attempts', 'rush_yards'): 0.90,
                 ('rush_yards', 'rush_td'): 0.60
             }
             

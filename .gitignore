@@ -48,6 +48,8 @@ lerna-debug.log*
 
 # Python
 __pycache__/
+*/__pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -68,6 +70,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 .pytest_cache/
+**/.pytest_cache/
 .coverage
 .env
 venv/
@@ -79,6 +82,11 @@ venv.bak/
 .ipynb_checkpoints
 profile_default/
 ipython_config.py
+*.pyc
+*.pyo
+*.pyd
+__pycache__
+*.cpython-*
 
 # Python test outputs
 htmlcov/
@@ -94,6 +102,12 @@ nosetests.xml
 backend/data/*.db
 backend/data/*.sqlite
 backend/data/*.sqlite3
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+backend/tests/data/*.db
+backend/tests/data/*.sqlite
+backend/tests/data/*.sqlite3
 
 # Data files
 rookie_projections.xlsx
@@ -115,12 +129,16 @@ temp/
 # Logs
 logs/
 *.log
+backend/logs/
+backend/logs/*.log
+**/logs/*.log
 
 # Generated data
 _generated/
 run_test_output/
 test-results/
 test_output/
+**/generated/
 
 # System specific
 **/.DS_Store

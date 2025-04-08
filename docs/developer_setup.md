@@ -63,14 +63,16 @@ This script will:
 
 ### 5. Import NFL Data (Optional)
 
-To populate the database with real NFL data for development:
+To populate the database with real NFL data for development, you have two options:
+
+#### Option A: Full Import (All At Once)
 
 ```bash
 cd backend/scripts
 python import_nfl_data.py --seasons 2023 --type full
 ```
 
-This will use the NFLDataImportService to import data from NFL sources. The first run may take some time as it downloads and processes all data for the season.
+This will use the NFLDataImportService to import all data from NFL sources at once. The first run may take some time as it downloads and processes all data for the season.
 
 You can also import specific data types:
 ```bash
@@ -90,11 +92,57 @@ python import_nfl_data.py --seasons 2023 --type totals
 python import_nfl_data.py --seasons 2023 --type validate
 ```
 
+#### Option B: Position-by-Position Import (Recommended)
+
+For better resource management, especially with large datasets, use the position-based import script:
+
+```bash
+# Import team data first
+python import_by_position.py --season 2023 --position team
+
+# Import QB data
+python import_by_position.py --season 2023 --position QB
+
+# Import RB data
+python import_by_position.py --season 2023 --position RB
+
+# Import WR data
+python import_by_position.py --season 2023 --position WR
+
+# Import TE data
+python import_by_position.py --season 2023 --position TE
+
+# Alternative: Import all positions with one command (still done sequentially)
+python import_by_position.py --season 2023 --position all
+```
+
+This approach uses less memory, as it processes one position at a time, making it ideal for development environments.
+
+#### Monitoring Import Process
+
 You can monitor the import process through:
 1. Console output: Provides real-time feedback during imports
-2. Log file: Detailed logs are saved to `nfl_data_import.log`
+2. Log files: Detailed logs are saved to the `backend/logs` directory
 3. Database logging: Import operations are logged to the `import_logs` table
 4. Metrics tracking: Request counts, errors, and processing times are tracked
+
+#### Verifying Import Results
+
+After importing data, you can verify what was imported using the check_import.py tool:
+
+```bash
+# Basic check
+python check_import.py
+
+# Filter by position
+python check_import.py --position QB --season 2023
+
+# Check specific player
+python check_import.py --player "Patrick Mahomes"
+
+# Show import logs
+python check_import.py --logs
+```
 
 ### 5.1 NFL Data Import Architecture
 

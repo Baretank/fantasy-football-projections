@@ -53,7 +53,9 @@ The system also provides endpoints for importing specific data types:
 
 ## Command Line Import
 
-For bulk operations or initial data loading, use the command-line import script:
+### Full Import (All Data at Once)
+
+For bulk operations or initial data loading, use the main import script:
 
 ```bash
 # Import full data for the 2023 season
@@ -75,6 +77,36 @@ python backend/scripts/import_nfl_data.py --seasons 2023 --type totals
 python backend/scripts/import_nfl_data.py --seasons 2023 --type validate
 ```
 
+### Position-by-Position Import (Recommended for Resource Management)
+
+For better resource management, especially with large datasets, use the position-based import script:
+
+```bash
+# Import team data first
+python backend/scripts/import_by_position.py --season 2024 --position team
+
+# Import QB data
+python backend/scripts/import_by_position.py --season 2024 --position QB
+
+# Import RB data
+python backend/scripts/import_by_position.py --season 2024 --position RB
+
+# Import WR data
+python backend/scripts/import_by_position.py --season 2024 --position WR
+
+# Import TE data
+python backend/scripts/import_by_position.py --season 2024 --position TE
+
+# Alternative: Import all positions with one command (still done sequentially)
+python backend/scripts/import_by_position.py --season 2024 --position all
+```
+
+The position-by-position approach offers several advantages:
+- Lower memory usage since it processes one position at a time
+- Better visibility into progress by position
+- Ability to prioritize specific positions
+- Easier recovery if an import fails (just restart that position)
+
 ## Data Processing Pipeline
 
 The NFL data import process follows these steps:
@@ -90,8 +122,26 @@ The NFL data import process follows these steps:
 The system logs all import operations to both the console and log files:
 
 - **Console output**: Provides real-time feedback during import operations
-- **Log file**: More detailed logs are saved to `nfl_data_import.log`
+- **Log files**: Detailed logs are saved to the `backend/logs` directory:
+  - `nfl_data_import.log`: For the main import script
+  - `position_import.log`: For position-based imports
 - **Database logging**: Import operations are also logged to the `import_logs` table in the database
+
+You can check database contents after import using the check_import.py tool:
+
+```bash
+# Basic check
+python backend/scripts/check_import.py
+
+# Filter by position
+python backend/scripts/check_import.py --position QB --season 2024
+
+# Check specific player
+python backend/scripts/check_import.py --player "Patrick Mahomes"
+
+# Show import logs
+python backend/scripts/check_import.py --logs
+```
 
 ## Troubleshooting
 

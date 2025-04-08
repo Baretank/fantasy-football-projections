@@ -38,7 +38,7 @@ async def get_players(
     page: int = Query(1, gt=0),
     page_size: int = Query(20, gt=0, le=100),
     sort_by: str = "name",
-    sort_dir: str = Query("asc", regex="^(asc|desc)$"),
+    sort_dir: str = Query("asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db)
 ):
     """
@@ -278,7 +278,7 @@ async def import_rookies(
 @router.put("/{player_id}/status", response_model=PlayerResponse)
 async def update_player_status(
     player_id: str,
-    status: str = Query(..., regex="^(Active|Injured|Rookie)$"),
+    status: str = Query(..., pattern="^(Active|Injured|Rookie)$"),
     db: Session = Depends(get_db)
 ):
     """
@@ -298,7 +298,7 @@ async def update_player_status(
 @router.put("/{player_id}/depth-chart", response_model=PlayerResponse)
 async def update_player_depth_chart(
     player_id: str,
-    position: str = Query(..., regex="^(Starter|Backup|Reserve)$"),
+    position: str = Query(..., pattern="^(Starter|Backup|Reserve)$"),
     db: Session = Depends(get_db)
 ):
     """

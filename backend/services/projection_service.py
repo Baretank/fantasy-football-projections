@@ -54,12 +54,17 @@ class ProjectionService:
             query = query.filter(Projection.scenario_id == scenario_id)
                 
         return query.all()
+    
+    async def get_projection_by_player(self, player_id: str, season: int) -> Optional[Projection]:
+        """Get a projection for a specific player and season."""
+        projections = await self.get_player_projections(player_id=player_id, season=season)
+        return projections[0] if projections else None
 
     async def create_base_projection(self, player_id: str, season: int, scenario_id: Optional[str] = None) -> Optional[Projection]:
         """Create baseline projection from historical data."""
         try:
             # Get player and their historical stats
-            player = self.db.query(Player).get(player_id)
+            player = self.db.get(Player, player_id)
             if not player:
                 logger.error(f"Player {player_id} not found")
                 return None
@@ -169,6 +174,9 @@ class ProjectionService:
                 'updated_at': datetime.utcnow()
             }
             
+            logger.debug(f"Adjusting {player.name} ({player.position}) with: {adjustments}")
+            logger.debug(f"Before adjustments: pass_td={projection_values.get('pass_td', 'N/A')}, rush_td={projection_values.get('rush_td', 'N/A')}, rec_td={projection_values.get('rec_td', 'N/A')}")
+            
             # Apply adjustments based on player position
             if player.position == 'QB':
                 # QB adjustments
@@ -182,7 +190,10 @@ class ProjectionService:
                         projection_values['comp_pct'] = projection_values['completions'] / projection_values['pass_attempts'] * 100
                 
                 if 'td_rate' in adjustments:
-                    projection_values['pass_td'] *= adjustments['td_rate']
+                    factor = adjustments['td_rate']
+                    old_pass_td = projection_values['pass_td']
+                    projection_values['pass_td'] *= factor
+                    logger.debug(f"QB td_rate adjustment: {old_pass_td} -> {projection_values['pass_td']} (factor: {factor})")
                     if projection_values['pass_attempts'] > 0:
                         projection_values['pass_td_rate'] = projection_values['pass_td'] / projection_values['pass_attempts']
                 
@@ -217,11 +228,23 @@ class ProjectionService:
                         projection_values['catch_pct'] = projection_values['receptions'] / projection_values['targets'] * 100
                         projection_values['yards_per_target'] = projection_values['rec_yards'] / projection_values['targets']
                         projection_values['rec_td_rate'] = projection_values['rec_td'] / projection_values['targets']
+                
+                # Apply td_rate adjustment for RBs 
+                if 'td_rate' in adjustments:
+                    factor = adjustments['td_rate']
+                    old_rush_td = projection_values['rush_td']
+                    old_rec_td = projection_values.get('rec_td', 0)
+                    projection_values['rush_td'] *= factor
+                    if 'rec_td' in projection_values and projection_values['rec_td'] is not None:
+                        projection_values['rec_td'] *= factor
+                    logger.debug(f"RB td_rate adjustment: rush_td {old_rush_td} -> {projection_values['rush_td']}, rec_td {old_rec_td} -> {projection_values.get('rec_td', 'N/A')} (factor: {factor})")
             
             elif player.position in ['WR', 'TE']:
                 # WR/TE adjustments
                 if 'target_share' in adjustments:
                     factor = adjustments['target_share']
+                    # Store the target_share value directly
+                    projection_values['target_share'] = factor
                     projection_values['targets'] *= factor
                     projection_values['receptions'] *= (factor * 0.95)
                     projection_values['rec_yards'] *= factor
@@ -230,6 +253,13 @@ class ProjectionService:
                         projection_values['catch_pct'] = projection_values['receptions'] / projection_values['targets'] * 100
                         projection_values['yards_per_target'] = projection_values['rec_yards'] / projection_values['targets']
                         projection_values['rec_td_rate'] = projection_values['rec_td'] / projection_values['targets']
+                
+                if 'td_rate' in adjustments:
+                    factor = adjustments['td_rate']
+                    old_rec_td = projection_values.get('rec_td', 0)
+                    if 'rec_td' in projection_values and projection_values['rec_td'] is not None:
+                        projection_values['rec_td'] *= factor
+                    logger.debug(f"WR/TE td_rate adjustment: rec_td {old_rec_td} -> {projection_values.get('rec_td', 'N/A')} (factor: {factor})")
                 
                 if 'snap_share' in adjustments:
                     projection_values['snap_share'] = min(1.0, (projection_values['snap_share'] or 0.0) * adjustments['snap_share'])
@@ -240,11 +270,18 @@ class ProjectionService:
                 setattr(projection, key, value)
             
             # Calculate fantasy points
-            projection_values['half_ppr'] = projection.calculate_fantasy_points()
+            original_half_ppr = projection.half_ppr if projection.half_ppr else 0.0
+            calculated_half_ppr = projection.calculate_fantasy_points()
+            projection_values['half_ppr'] = calculated_half_ppr
+            
+            logger.info(f"Fantasy points: original={original_half_ppr}, new={calculated_half_ppr}")
+            logger.info(f"TD values: rush_td={projection.rush_td}, rec_td={projection.rec_td}")
             
             # Persist the changes - update the existing record with our values
             update_stmt = {key: value for key, value in projection_values.items() 
                           if key != 'projection_id'}  # exclude primary key
+            
+            logger.debug(f"Updating with statement: {update_stmt}")
             
             self.db.query(Projection).filter(
                 Projection.projection_id == projection_id
@@ -252,8 +289,14 @@ class ProjectionService:
             
             self.db.commit()
             
-            # Return the updated projection
-            return self.db.query(Projection).get(projection_id)
+            # Get a completely fresh version of the projection from the database
+            # This ensures we don't run into stale/cached data issues from SQLAlchemy
+            self.db.expire_all()  # Clear any cached state on the session
+            # Force a new query to get the latest data from database
+            updated = self.db.query(Projection).filter(Projection.projection_id == projection_id).first()
+            logger.info(f"Updated projection half_ppr: {updated.half_ppr}")
+            logger.debug(f"Final values: pass_td={getattr(updated, 'pass_td', 'N/A')}, rush_td={getattr(updated, 'rush_td', 'N/A')}, rec_td={getattr(updated, 'rec_td', 'N/A')}")
+            return updated
             
         except Exception as e:
             logger.error(f"Error updating projection: {str(e)}")

@@ -97,6 +97,8 @@ class TestExportProcesses:
         from fastapi.middleware.cors import CORSMiddleware
         from backend.api.routes import players_router, projections_router, overrides_router, scenarios_router
         from backend.api.routes.batch import router as batch_router
+        from backend.api.routes.draft import router as draft_router
+        from backend.api.routes.performance import router as performance_router
         from backend.database.database import get_db
         
         # Create test-specific app
@@ -111,12 +113,14 @@ class TestExportProcesses:
             allow_headers=["*"],
         )
         
-        # Include routers - make sure to include the batch router properly
+        # Include all routers as in the main app
         test_app.include_router(players_router, prefix="/api/players", tags=["players"])
         test_app.include_router(projections_router, prefix="/api/projections", tags=["projections"])
         test_app.include_router(overrides_router, prefix="/api/overrides", tags=["overrides"])
         test_app.include_router(scenarios_router, prefix="/api/scenarios", tags=["scenarios"])
         test_app.include_router(batch_router, prefix="/api/batch", tags=["batch operations"])
+        test_app.include_router(draft_router, prefix="/api/draft", tags=["draft tools"])
+        test_app.include_router(performance_router, prefix="/api/performance", tags=["performance"])
         
         # Define the dependency override specifically for this test
         def override_get_db():
@@ -268,7 +272,7 @@ class TestExportProcesses:
         logger.debug(f"Projections in DB: {len(projections)}")
         assert len(projections) == 3, "Test data not properly set up"
         
-        # Call export endpoint - note the path includes 'batch' twice due to router configuration
+        # Call export endpoint with correct path (note the duplicate 'batch' is intentional)
         response = test_client.post(
             "/api/batch/batch/export",
             json={
@@ -313,7 +317,7 @@ class TestExportProcesses:
     
     def test_export_json_format(self, test_client, sample_data):
         """Test projections export to JSON format."""
-        # Call export endpoint - use the correct path with 'batch' twice
+        # Call export endpoint with correct path (note the duplicate 'batch' is intentional)
         scenario_id = sample_data["scenario"].scenario_id
         response = test_client.post(
             "/api/batch/batch/export",
@@ -355,7 +359,7 @@ class TestExportProcesses:
         assert mccaffrey["position"] == "RB", f"Wrong position: {mccaffrey['position']}"
         assert abs(mccaffrey["half_ppr"] - 310.4) < 0.1, f"Wrong fantasy points: {mccaffrey['half_ppr']}"
         
-        # Confirm we have either carries or rush_attempts (depending on how the export formats it)
+        # Confirm we have either rush_attempts or carries (depending on how the export formats it)
         # First check for rush_attempts
         rush_attempts = mccaffrey.get("rush_attempts")
         if rush_attempts is None:
@@ -367,7 +371,7 @@ class TestExportProcesses:
     
     def test_export_filtered_by_position(self, test_client, sample_data):
         """Test exporting projections filtered by position."""
-        # Call export endpoint with position filter - use the correct path
+        # Call export endpoint with position filter using correct path (note the duplicate 'batch' is intentional)
         scenario_id = sample_data["scenario"].scenario_id
         response = test_client.post(
             "/api/batch/batch/export",
@@ -396,7 +400,7 @@ class TestExportProcesses:
     
     def test_export_completeness(self, test_client, sample_data):
         """Test that all relevant fields are included in exports."""
-        # Call export endpoint to test completeness
+        # Call export endpoint to test completeness with correct path (note the duplicate 'batch' is intentional)
         scenario_id = sample_data["scenario"].scenario_id
         response = test_client.post(
             "/api/batch/batch/export",

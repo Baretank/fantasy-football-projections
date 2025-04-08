@@ -94,6 +94,8 @@ class TestDraftDayTools:
         from fastapi.middleware.cors import CORSMiddleware
         from backend.api.routes import players_router, projections_router, overrides_router, scenarios_router
         from backend.api.routes.batch import router as batch_router
+        from backend.api.routes.draft import router as draft_router
+        from backend.api.routes.performance import router as performance_router
         from backend.database.database import get_db
         
         # Create test-specific app
@@ -114,6 +116,8 @@ class TestDraftDayTools:
         test_app.include_router(overrides_router, prefix="/api/overrides", tags=["overrides"])
         test_app.include_router(scenarios_router, prefix="/api/scenarios", tags=["scenarios"])
         test_app.include_router(batch_router, prefix="/api/batch", tags=["batch operations"])
+        test_app.include_router(draft_router, prefix="/api/draft", tags=["draft tools"])
+        test_app.include_router(performance_router, prefix="/api/performance", tags=["performance"])
         
         # Define the dependency override specifically for this test
         def override_get_db():
@@ -198,12 +202,12 @@ class TestDraftDayTools:
         """Test updating a player's draft status."""
         # Draft a player
         response = test_client.post(
-            "/api/players/players/draft-status",
+            "/api/draft/draft-status",
             json={
                 "player_id": "player1",
                 "draft_status": "drafted",
-                "draft_position": 5,
-                "draft_team": "Team A"
+                "fantasy_team": "Team A",
+                "draft_order": 5
             }
         )
         
@@ -216,27 +220,27 @@ class TestDraftDayTools:
         updated_player = test_db.query(Player).filter(Player.player_id == "player1").first()
         assert updated_player is not None, "Player not found in database"
         assert updated_player.draft_status == "drafted", f"Wrong draft status: {updated_player.draft_status}"
-        assert updated_player.draft_position == 5, f"Wrong draft position: {updated_player.draft_position}"
-        assert updated_player.draft_team == "Team A", f"Wrong draft team: {updated_player.draft_team}"
+        assert updated_player.draft_order == 5, f"Wrong draft order: {updated_player.draft_order}"
+        assert updated_player.fantasy_team == "Team A", f"Wrong fantasy team: {updated_player.fantasy_team}"
     
     def test_batch_update_draft_status(self, test_client, sample_players, test_db):
         """Test batch updating multiple players' draft status."""
         # Draft multiple players
         response = test_client.post(
-            "/api/players/players/batch-draft-status",
+            "/api/draft/batch-draft-status",
             json={
                 "updates": [
                     {
                         "player_id": "player2",
                         "draft_status": "drafted",
-                        "draft_position": 1,
-                        "draft_team": "Team B"
+                        "fantasy_team": "Team B",
+                        "draft_order": 1
                     },
                     {
                         "player_id": "player3",
                         "draft_status": "drafted",
-                        "draft_position": 2,
-                        "draft_team": "Team C"
+                        "fantasy_team": "Team C",
+                        "draft_order": 2
                     }
                 ]
             }
@@ -255,23 +259,23 @@ class TestDraftDayTools:
         assert player3 is not None, "Player 3 not found"
         
         assert player2.draft_status == "drafted", f"Wrong draft status: {player2.draft_status}"
-        assert player2.draft_position == 1, f"Wrong draft position: {player2.draft_position}"
-        assert player2.draft_team == "Team B", f"Wrong draft team: {player2.draft_team}"
+        assert player2.draft_order == 1, f"Wrong draft order: {player2.draft_order}"
+        assert player2.fantasy_team == "Team B", f"Wrong fantasy team: {player2.fantasy_team}"
         
         assert player3.draft_status == "drafted", f"Wrong draft status: {player3.draft_status}"
-        assert player3.draft_position == 2, f"Wrong draft position: {player3.draft_position}"
-        assert player3.draft_team == "Team C", f"Wrong draft team: {player3.draft_team}"
+        assert player3.draft_order == 2, f"Wrong draft order: {player3.draft_order}"
+        assert player3.fantasy_team == "Team C", f"Wrong fantasy team: {player3.fantasy_team}"
     
     def test_auto_projection_after_draft(self, test_client, sample_players, test_db):
         """Test that rookie projections are automatically generated after draft."""
         # Draft a rookie with projection creation enabled
         response = test_client.post(
-            "/api/players/players/draft-status",
+            "/api/draft/draft-status",
             json={
                 "player_id": "player4",
                 "draft_status": "drafted",
-                "draft_position": 10,
-                "draft_team": "Team D",
+                "fantasy_team": "Team D",
+                "draft_order": 10,
                 "create_projection": True  # Request projection creation
             }
         )
@@ -303,7 +307,7 @@ class TestDraftDayTools:
     
     def test_get_draft_board(self, test_client, sample_players):
         """Test retrieving the draft board with player statuses."""
-        response = test_client.get("/api/players/players/draft-board")
+        response = test_client.get("/api/draft/draft-board")
         
         if response.status_code != 200:
             logger.debug(f"Draft board response: {response.status_code} - {response.text}")
@@ -328,11 +332,11 @@ class TestDraftDayTools:
         player = test_db.query(Player).filter(Player.player_id == "player1").first()
         assert player is not None, "Player not found"
         player.draft_status = "drafted"
-        player.draft_team = "Team A"
+        player.fantasy_team = "Team A"
         test_db.commit()
         
         # Get only available players
-        response = test_client.get("/api/players/players/draft-board?status=available")
+        response = test_client.get("/api/draft/draft-board?status=available")
         
         if response.status_code != 200:
             logger.debug(f"Filtered draft board response: {response.status_code} - {response.text}")
@@ -352,16 +356,16 @@ class TestDraftDayTools:
         # First, draft multiple players
         player1 = test_db.query(Player).filter(Player.player_id == "player1").first()
         player1.draft_status = "drafted"
-        player1.draft_position = 1
+        player1.draft_order = 1
         
         player2 = test_db.query(Player).filter(Player.player_id == "player2").first()
         player2.draft_status = "drafted"
-        player2.draft_position = 2
+        player2.draft_order = 2
         
         test_db.commit()
         
         # Get draft progress
-        response = test_client.get("/api/players/players/draft-progress")
+        response = test_client.get("/api/draft/draft-progress")
         
         if response.status_code != 200:
             logger.debug(f"Draft progress response: {response.status_code} - {response.text}")
@@ -385,11 +389,11 @@ class TestDraftDayTools:
         # First, draft a player
         player = test_db.query(Player).filter(Player.player_id == "player1").first()
         player.draft_status = "drafted"
-        player.draft_team = "Team A"
+        player.fantasy_team = "Team A"
         test_db.commit()
         
         # Reset all draft statuses
-        response = test_client.post("/api/players/players/reset-draft")
+        response = test_client.post("/api/draft/reset-draft")
         
         if response.status_code != 200:
             logger.debug(f"Reset draft response: {response.status_code} - {response.text}")
@@ -400,7 +404,7 @@ class TestDraftDayTools:
         players = test_db.query(Player).all()
         for player in players:
             assert player.draft_status == "available", f"Player should be available, got {player.draft_status}"
-            assert player.draft_team is None or player.draft_team == "", f"Draft team should be empty, got {player.draft_team}"
+            assert player.fantasy_team is None or player.fantasy_team == "", f"Fantasy team should be empty, got {player.fantasy_team}"
     
     def test_undo_last_draft_pick(self, test_client, sample_players, test_db):
         """Test undoing the last draft pick."""
@@ -409,12 +413,12 @@ class TestDraftDayTools:
             player = test_db.query(Player).filter(Player.player_id == player_id).first()
             assert player is not None, f"Player {player_id} not found"
             player.draft_status = "drafted"
-            player.draft_position = i + 1
-            player.draft_team = f"Team {i+1}"
+            player.draft_order = i + 1
+            player.fantasy_team = f"Team {i+1}"
         test_db.commit()
         
         # Undo last pick
-        response = test_client.post("/api/players/players/undo-draft")
+        response = test_client.post("/api/draft/undo-draft")
         
         if response.status_code != 200:
             logger.debug(f"Undo draft response: {response.status_code} - {response.text}")

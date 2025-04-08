@@ -39,7 +39,6 @@ class TestProjectionService:
                 rush_attempts=410,
                 rush_yards=1950,
                 rush_td=19,
-                carries=410,
                 rush_yards_per_carry=4.76,
                 targets=590,
                 receptions=405,

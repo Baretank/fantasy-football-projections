@@ -60,14 +60,15 @@ class BatchService:
             # Check if circuit breaker is active
             if consecutive_failures >= self.failure_threshold:
                 # Log circuit breaker activation
-                log_entry = ImportLog(
-                    operation=f"batch_process:{method_name}",
-                    status="failure",
-                    message=f"Circuit breaker activated after {consecutive_failures} consecutive failures",
-                    details={"failed_items": len(results), "total_items": len(items)}
-                )
-                self.db.add(log_entry)
                 try:
+                    log_entry = ImportLog(
+                        log_id=str(uuid.uuid4()),
+                        operation=f"batch_process:{method_name}",
+                        status="failure",
+                        message=f"Circuit breaker activated after {consecutive_failures} consecutive failures",
+                        details={"failed_items": len(results), "total_items": len(items)}
+                    )
+                    self.db.add(log_entry)
                     self.db.commit()
                 except Exception as e:
                     logger.error(f"Error committing circuit breaker log: {str(e)}")
@@ -98,18 +99,24 @@ class BatchService:
                     # Log error
                     try:
                         log_entry = ImportLog(
+                            log_id=str(uuid.uuid4()),
                             operation=f"batch_process:{method_name}",
                             status="failure",
                             message=f"Error processing item: {str(e)}",
                             details={"item": str(item)}
                         )
                         self.db.add(log_entry)
+                        self.db.commit()
                     except Exception as log_error:
                         logger.error(f"Error creating error log: {str(log_error)}")
+                        self.db.rollback()
             
-            # Update consecutive failures counter
+            # Update consecutive failures counter and explicitly check threshold
             if batch_failures == len(batch):
                 consecutive_failures += 1
+                # Circuit breaker check after updating
+                if consecutive_failures >= self.failure_threshold:
+                    logger.warning(f"Circuit breaker threshold reached with {consecutive_failures} consecutive failures")
             else:
                 consecutive_failures = 0
             
@@ -393,15 +400,15 @@ class BatchService:
         position_fields = {
             "QB": [
                 "pass_attempts", "completions", "pass_yards", "pass_td", 
-                "interceptions", "carries", "rush_yards", "rush_td"
+                "interceptions", "rush_attempts", "rush_yards", "rush_td"
             ],
             "RB": [
-                "carries", "rush_yards", "rush_td", 
+                "rush_attempts", "rush_yards", "rush_td", 
                 "targets", "receptions", "rec_yards", "rec_td"
             ],
             "WR": [
                 "targets", "receptions", "rec_yards", "rec_td",
-                "carries", "rush_yards", "rush_td"
+                "rush_attempts", "rush_yards", "rush_td"
             ],
             "TE": [
                 "targets", "receptions", "rec_yards", "rec_td"
@@ -506,7 +513,7 @@ class BatchService:
             
             # Add position-specific stats
             if proj.player.position == "QB":
-                # Use rush_attempts instead of carries for standardization
+                # Use rush_attempts instead of rush_attempts for standardization
                 rush_attempts = getattr(proj, 'rush_attempts', None)
                 proj_data.update({
                     "pass_attempts": proj.pass_attempts,
@@ -519,7 +526,7 @@ class BatchService:
                     "rush_td": proj.rush_td
                 })
             elif proj.player.position in ["RB", "WR", "TE"]:
-                # Use rush_attempts instead of carries for standardization
+                # Use rush_attempts instead of rush_attempts for standardization
                 rush_attempts = getattr(proj, 'rush_attempts', None)
                 if rush_attempts is not None:
                     proj_data.update({

@@ -97,7 +97,7 @@ async def batch_create_scenarios(
 @router.post("/export")
 async def export_projections(
     request: ExportFiltersRequest,
-    format: str = Query("csv", regex="^(csv|json)$"),
+    format: str = Query("csv", pattern="^(csv|json)$"),
     include_metadata: bool = False,
     db: Session = Depends(get_db)
 ):

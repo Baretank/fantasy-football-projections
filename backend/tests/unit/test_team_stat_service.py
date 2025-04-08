@@ -95,7 +95,7 @@ class TestTeamStatService:
             int_rate=0.017,
             
             # Rushing stats
-            carries=60,
+            rush_attempts=60,
             rush_yards=350,
             rush_td=3,
             yards_per_carry=5.83,
@@ -153,7 +153,6 @@ class TestTeamStatService:
             rush_attempts=385,           # Decreased due to more passes
             rush_yards=1540,             # Slightly decreased
             rush_td=16,                  # Decreased from 19
-            carries=385,                 # Same as rush_attempts
             rush_yards_per_carry=4.0,    # 1540/385
             targets=715,                 # Same as pass_attempts
             receptions=465,              # Increased
@@ -222,7 +221,6 @@ class TestTeamStatService:
             rush_attempts=300,           # Decreased from 400
             rush_yards=1300,             # Decreased from 1600
             rush_td=15,                  # Decreased from 19
-            carries=300,                 # Same as rush_attempts
             rush_yards_per_carry=4.33,   # 1300/300
             targets=700,                 # Same as pass_attempts
             receptions=455,              # Increased from 390
@@ -289,7 +287,6 @@ class TestTeamStatService:
             rush_attempts=400,           # Same rush attempts
             rush_yards=1550,             # Slightly fewer yards
             rush_td=17,                  # Fewer TDs
-            carries=400,                 # Same as rush_attempts
             rush_yards_per_carry=3.875,  # 1550/400
             targets=550,                 # Same as pass_attempts
             receptions=360,              # Fewer

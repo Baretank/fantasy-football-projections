@@ -564,10 +564,9 @@ class OverrideService:
         # Handle rushing efficiency metrics
         if changed_stat in ['rush_attempts', 'rush_yards']:
             if projection.rush_attempts and projection.rush_attempts > 0:
-                projection.yards_per_carry = (
-                    projection.rush_yards / projection.rush_attempts 
-                    if projection.rush_yards else 0.0
-                )
+                # Make sure rush_yards is defined before calculating yards_per_carry
+                if projection.rush_yards is not None:
+                    projection.yards_per_carry = projection.rush_yards / projection.rush_attempts
         
         if changed_stat in ['rush_attempts', 'rush_td']:
             if projection.rush_attempts and projection.rush_attempts > 0:

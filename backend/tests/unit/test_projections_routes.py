@@ -42,7 +42,7 @@ class TestProjectionsRoutes:
             "pass_yards": 4500.0,
             "pass_td": 32.0,
             "interceptions": 12.0,
-            "carries": 65.0,
+            "rush_attempts": 65.0,
             "rush_yards": 350.0,
             "rush_td": 3.0,
             "has_overrides": False
@@ -174,7 +174,8 @@ class TestProjectionsRoutes:
             # Verify service was called correctly
             service_instance.create_base_projection.assert_called_once_with(
                 player_id=player_id,
-                season=season
+                season=season,
+                scenario_id=None
             )
             
             # Verify response
@@ -217,7 +218,7 @@ class TestProjectionsRoutes:
         request_data = {
             "adjustments": {
                 "pass_attempts": 1.1,
-                "rush_share": 0.9
+                "rush_volume": 0.9
             }
         }
         
@@ -241,7 +242,7 @@ class TestProjectionsRoutes:
             service_instance.update_projection = AsyncMock(return_value=mock_projection)
             
             # Make request
-            response = client.put(f"/projections/{projection_id}/adjust", json=request_data)
+            response = client.post(f"/projections/{projection_id}/adjust", json=request_data)
             
             # Verify service was called correctly
             service_instance.update_projection.assert_called_once_with(
@@ -332,7 +333,6 @@ class TestProjectionsRoutes:
                 "rush_attempts": 418.0,
                 "rush_yards": 1850.0,
                 "rush_td": 18.0,
-                "carries": 380.0,
                 "rush_yards_per_carry": 4.8,
                 "targets": 682.0,
                 "receptions": 450.0,
@@ -404,6 +404,7 @@ class TestProjectionsRoutes:
                 "projection_id": str(uuid.uuid4()),
                 "player_id": player_id_1,
                 "season": season,
+                "games": 17,
                 "half_ppr": 320.5,
                 "pass_attempts": 715.0,
                 "pass_yards": 5400.0
@@ -412,6 +413,7 @@ class TestProjectionsRoutes:
                 "projection_id": str(uuid.uuid4()),
                 "player_id": player_id_2,
                 "season": season,
+                "games": 16,
                 "half_ppr": 180.2,
                 "targets": 150.0,
                 "receptions": 110.0
@@ -423,15 +425,16 @@ class TestProjectionsRoutes:
             service_instance = mock_service.return_value
             service_instance.apply_team_adjustments = AsyncMock(return_value=mock_updated_projections)
             
-            # Make request
-            response = client.put(f"/projections/team/{team}/adjust?season={season}", json=adjustments)
+            # Make request with adjustments in the body
+            response = client.put(f"/projections/team/{team}/adjust?season={season}", json={"adjustments": adjustments})
             
             # Verify service was called correctly
             service_instance.apply_team_adjustments.assert_called_once_with(
                 team=team,
                 season=season,
                 adjustments=adjustments,
-                player_shares=None
+                player_shares=None,
+                scenario_id=None
             )
             
             # Verify response

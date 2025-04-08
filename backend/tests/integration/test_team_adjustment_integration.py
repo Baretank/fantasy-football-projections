@@ -40,7 +40,6 @@ class TestTeamAdjustmentIntegration:
             rush_attempts=400,
             rush_yards=1800,
             rush_td=15,
-            carries=400,
             rush_yards_per_carry=4.5,
             targets=600,
             receptions=390,
@@ -62,7 +61,6 @@ class TestTeamAdjustmentIntegration:
             rush_attempts=350,  # Decreased rushing
             rush_yards=1700,
             rush_td=14,
-            carries=350,
             rush_yards_per_carry=4.86,
             targets=650,
             receptions=420,
@@ -104,7 +102,7 @@ class TestTeamAdjustmentIntegration:
                     pass_yards=4100,
                     pass_td=28,
                     interceptions=10,
-                    carries=55,
+                    rush_attempts=55,
                     rush_yards=250,
                     rush_td=2,
                     half_ppr=300  # Placeholder
@@ -116,7 +114,7 @@ class TestTeamAdjustmentIntegration:
                         player_id=player.player_id,
                         season=projection_season,
                         games=16,
-                        carries=240,
+                        rush_attempts=240,
                         rush_yards=1100,
                         rush_td=9,
                         targets=60,
@@ -131,7 +129,7 @@ class TestTeamAdjustmentIntegration:
                         player_id=player.player_id,
                         season=projection_season,
                         games=16,
-                        carries=120,
+                        rush_attempts=120,
                         rush_yards=520,
                         rush_td=3,
                         targets=30,
@@ -151,7 +149,7 @@ class TestTeamAdjustmentIntegration:
                         receptions=105,
                         rec_yards=1300,
                         rec_td=10,
-                        carries=10,
+                        rush_attempts=10,
                         rush_yards=60,
                         rush_td=0,
                         half_ppr=250  # Placeholder
@@ -166,7 +164,7 @@ class TestTeamAdjustmentIntegration:
                         receptions=75,
                         rec_yards=900,
                         rec_td=7,
-                        carries=5,
+                        rush_attempts=5,
                         rush_yards=30,
                         rush_td=0,
                         half_ppr=180  # Placeholder
@@ -270,7 +268,7 @@ class TestTeamAdjustmentIntegration:
             # Create a dynamic method that returns a reasonable fantasy point value
             if hasattr(proj, 'pass_yards') and proj.pass_yards:
                 proj.calculate_fantasy_points = lambda: 300
-            elif hasattr(proj, 'rush_yards') and proj.rush_yards and hasattr(proj, 'carries') and proj.carries > 200:
+            elif hasattr(proj, 'rush_yards') and proj.rush_yards and hasattr(proj, 'rush_attempts') and proj.rush_attempts > 200:
                 proj.calculate_fantasy_points = lambda: 200
             elif hasattr(proj, 'rec_yards') and proj.rec_yards and hasattr(proj, 'rec_td') and proj.rec_td > 7:
                 proj.calculate_fantasy_points = lambda: 250

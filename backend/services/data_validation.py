@@ -1,11 +1,11 @@
 import logging
 import pandas as pd
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from sqlalchemy.exc import SQLAlchemyError
 
-from backend.database.models import Player, BaseStat, GameStats
+from backend.database.models import Player, BaseStat, GameStats, TeamStat
 
 logger = logging.getLogger(__name__)
 
@@ -282,3 +282,95 @@ class DataValidationService:
         # Implementation depends on how team stats are stored and calculated
         # Reserved for future enhancement
         return []
+        
+    async def validate_team_stats(self, team: str, season: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Validate team statistics for consistency.
+        
+        Args:
+            team: The team abbreviation to validate
+            season: Optional season to filter by, if not provided uses the latest season
+            
+        Returns:
+            Dict with validation results
+        """
+        try:
+            # Build query for team stats
+            query = self.db.query(TeamStat).filter(TeamStat.team == team)
+            
+            if season:
+                query = query.filter(TeamStat.season == season)
+            else:
+                # Use the latest season if not specified
+                latest_season = self.db.query(TeamStat.season).order_by(TeamStat.season.desc()).first()
+                if latest_season:
+                    season = latest_season[0]
+                    query = query.filter(TeamStat.season == season)
+            
+            # Get team stats
+            team_stats = query.first()
+            
+            if not team_stats:
+                return {
+                    "valid": False,
+                    "message": f"No team stats found for {team}" + (f" in season {season}" if season else ""),
+                    "issues": []
+                }
+            
+            # Run validations
+            issues = []
+            
+            # Check if plays matches the sum of pass and rush attempts
+            total_plays = team_stats.pass_attempts + team_stats.rush_attempts
+            if abs(total_plays - team_stats.plays) > 1:  # Allow 1 play difference for rounding
+                issues.append(f"Plays mismatch: Total {team_stats.plays} != Pass {team_stats.pass_attempts} + Rush {team_stats.rush_attempts}")
+                
+            # Check if pass percentage matches actual ratio
+            if team_stats.plays > 0:
+                expected_pass_pct = team_stats.pass_attempts / team_stats.plays
+                if abs(expected_pass_pct - team_stats.pass_percentage) > 0.01:  # Allow 1% difference
+                    issues.append(f"Pass percentage mismatch: Stored {team_stats.pass_percentage:.3f} != Calculated {expected_pass_pct:.3f}")
+                    
+            # Check if yards per carry matches
+            if team_stats.rush_attempts > 0:
+                expected_ypc = team_stats.rush_yards / team_stats.rush_attempts
+                if abs(expected_ypc - team_stats.rush_yards_per_carry) > 0.01:  # Allow 0.01 ypc difference
+                    issues.append(f"Rush YPC mismatch: Stored {team_stats.rush_yards_per_carry:.2f} != Calculated {expected_ypc:.2f}")
+                    
+            # Check if passing stats match receiving stats
+            if team_stats.pass_yards != team_stats.rec_yards:
+                issues.append(f"Pass/Rec yards mismatch: Pass {team_stats.pass_yards} != Rec {team_stats.rec_yards}")
+                
+            if team_stats.pass_td != team_stats.rec_td:
+                issues.append(f"Pass/Rec TD mismatch: Pass {team_stats.pass_td} != Rec {team_stats.rec_td}")
+                
+            # Check if targets match pass attempts
+            if team_stats.targets != team_stats.pass_attempts:
+                issues.append(f"Targets/Pass attempts mismatch: Targets {team_stats.targets} != Pass Attempts {team_stats.pass_attempts}")
+            
+            # Check if passing TDs make sense
+            pass_td_rate = team_stats.pass_td / team_stats.pass_attempts if team_stats.pass_attempts > 0 else 0
+            if abs(pass_td_rate - team_stats.pass_td_rate) > 0.01:
+                issues.append(f"Pass TD rate mismatch: Stored {team_stats.pass_td_rate:.3f} != Calculated {pass_td_rate:.3f}")
+            
+            return {
+                "valid": len(issues) == 0,
+                "message": "Team stats validation " + ("successful" if len(issues) == 0 else "failed"),
+                "issues": issues,
+                "team_stats": {
+                    "team": team_stats.team,
+                    "season": team_stats.season,
+                    "plays": team_stats.plays,
+                    "pass_attempts": team_stats.pass_attempts,
+                    "rush_attempts": team_stats.rush_attempts,
+                    "pass_yards": team_stats.pass_yards,
+                    "rush_yards": team_stats.rush_yards
+                }
+            }
+            
+        except Exception as e:
+            return {
+                "valid": False,
+                "message": f"Error validating team stats: {str(e)}",
+                "issues": [str(e)]
+            }

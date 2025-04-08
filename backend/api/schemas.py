@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, ConfigDict
 from typing import Dict, List, Optional, Union, Any
 from datetime import datetime, date
 
@@ -28,8 +28,7 @@ class PlayerResponse(PlayerBase):
     created_at: datetime = Field(..., description="Record creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class PlayerStatBase(BaseModel):
     """Base statistics model."""
@@ -67,7 +66,7 @@ class ProjectionResponse(ProjectionBase):
     pass_yards: Optional[float] = None
     pass_td: Optional[float] = None
     interceptions: Optional[float] = None
-    carries: Optional[float] = None
+    rush_attempts: Optional[float] = None
     rush_yards: Optional[float] = None
     rush_td: Optional[float] = None
     targets: Optional[float] = None
@@ -111,18 +110,19 @@ class ProjectionResponse(ProjectionBase):
     has_overrides: bool = False
     is_fill_player: bool = False
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class AdjustmentRequest(BaseModel):
     """Projection adjustment request."""
     adjustments: Dict[str, float] = Field(
         ..., 
         description="Adjustment factors for various metrics",
-        example={
-            "snap_share": 1.1,
-            "target_share": 0.95,
-            "td_rate": 1.05
+        json_schema_extra={
+            "example": {
+                "snap_share": 1.1,
+                "target_share": 0.95,
+                "td_rate": 1.05
+            }
         }
     )
 
@@ -143,8 +143,7 @@ class ScenarioResponse(ScenarioBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class StatOverrideBase(BaseModel):
     """Base stat override model."""
@@ -165,8 +164,7 @@ class StatOverrideResponse(StatOverrideBase):
     calculated_value: float = Field(..., description="Original calculated value")
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class BatchOverrideRequest(BaseModel):
     """Batch override request for multiple players."""
@@ -263,7 +261,6 @@ class TeamStatsResponse(BaseModel):
     rush_attempts: float = Field(..., description="Season rush attempts")
     rush_yards: float = Field(..., description="Season rush yards")
     rush_td: float = Field(..., description="Season rush TDs")
-    carries: float = Field(..., description="Total RB carries")
     rush_yards_per_carry: float = Field(..., description="Yards per carry")
     targets: float = Field(..., description="Total targets")
     receptions: float = Field(..., description="Total receptions")
@@ -274,8 +271,7 @@ class TeamStatsResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ConfidenceIntervalResponse(BaseModel):
     """Response for variance and confidence interval endpoints."""
@@ -298,9 +294,11 @@ class BatchProjectionAdjustRequest(BaseModel):
     adjustments: Dict[str, Dict[str, float]] = Field(
         ..., 
         description="Map of projection IDs to adjustment values",
-        example={
-            "projection_id1": {"target_share": 1.1, "td_rate": 0.9},
-            "projection_id2": {"snap_share": 0.8}
+        json_schema_extra={
+            "example": {
+                "projection_id1": {"target_share": 1.1, "td_rate": 0.9},
+                "projection_id2": {"snap_share": 0.8}
+            }
         }
     )
 
@@ -313,9 +311,11 @@ class ScenarioTemplate(BaseModel):
     player_adjustments: Optional[Dict[str, Dict[str, float]]] = Field(
         None, 
         description="Player-specific adjustments",
-        example={
-            "player_id1": {"target_share": 1.2},
-            "player_id2": {"rush_share": 0.9}
+        json_schema_extra={
+            "example": {
+                "player_id1": {"target_share": 1.2},
+                "player_id2": {"rush_share": 0.9}
+            }
         }
     )
 
@@ -328,10 +328,12 @@ class ExportFiltersRequest(BaseModel):
     filters: Optional[Dict[str, Any]] = Field(
         None, 
         description="Export filters",
-        example={
-            "team": "SF",
-            "position": ["QB", "RB"],
-            "season": 2024
+        json_schema_extra={
+            "example": {
+                "team": "SF",
+                "position": ["QB", "RB"],
+                "season": 2024
+            }
         }
     )
 
@@ -403,8 +405,7 @@ class RookieProjectionTemplateResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
         
 class RookieProjectionTemplateRequest(BaseModel):
     """Request to create or update a rookie projection template."""

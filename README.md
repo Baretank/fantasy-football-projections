@@ -16,8 +16,8 @@ A modern web application for creating and managing fantasy football player proje
 - **Granular Controls**: Fine-tune individual player metrics and see real-time impacts
 - **Batch Operations**: Apply changes to multiple players simultaneously
 - **Modern Interface**: Intuitive React-based UI with real-time updates
-- **NFL Data Integration**: Comprehensive NFL data import from official NFL API and nfl_data_py with robust validation
-- **Performance Optimization**: Caching and query optimization for fast response times
+- **NFL Data Integration**: Comprehensive NFL data import from official NFL API and nfl_data_py with robust validation and resource-efficient position-by-position import
+- **Performance Optimization**: Caching, batch commits, and query optimization for fast response times
 
 ## 🚀 Getting Started
 
@@ -56,7 +56,19 @@ npm install
 5. Optional: Import NFL data for analysis:
 ```bash
 cd backend/scripts
+
+# Option A: Import all at once (can be memory intensive)
 python import_nfl_data.py --seasons 2023 --type full
+
+# Option B: Import position-by-position (recommended for resource management)
+python import_by_position.py --season 2023 --position team
+python import_by_position.py --season 2023 --position QB
+python import_by_position.py --season 2023 --position RB
+python import_by_position.py --season 2023 --position WR
+python import_by_position.py --season 2023 --position TE
+
+# Or import all positions sequentially with one command
+python import_by_position.py --season 2023 --position all
 ```
 
 ### Running the Application
@@ -83,8 +95,12 @@ fantasy-football-projections/
 │   ├── api/                 # API routes and schemas
 │   │   └── routes/          # API endpoint definitions
 │   ├── database/            # Database models and connection
+│   ├── logs/                # Log files from import and other operations
+│   ├── scripts/             # Utility scripts for data import and management
 │   ├── services/            # Business logic and data processing
+│   │   └── adapters/        # Adapters for external data sources
 │   └── tests/               # Backend tests
+├── docs/                    # Project documentation
 ├── frontend/                # React + TypeScript frontend
 │   ├── src/
 │   │   ├── components/      # React components
@@ -174,7 +190,9 @@ npm test
 - Technical implementation details: See `docs/model.md`
 - Database schema and models: See `backend/database/models.py`
 - Project structure: See `docs/structure.md`
-- NFL data import system: See `backend/nfl_data_integration.md`
+- NFL data import system: See `docs/nfl_data_import.md` and `docs/nfl_data_integration.md`
+- Next steps and current progress: See `backend/nextsteps.md`
+- Script documentation: See `backend/scripts/README.md`
 
 ## 🤝 Contributing
 
@@ -198,7 +216,9 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - **Enhanced Dashboard**: Improved analytics dashboard with key performance indicators
 - **Modern Navigation**: Comprehensive navigation structure with improved UX
 - **NFL Data Integration**: New NFL data import system using official NFL API and nfl_data_py instead of web scraping
-- **Performance Optimization**: Caching and query optimization for faster response times
+- **Position-by-Position Import**: Resource-efficient imports with position-based filtering
+- **Centralized Logging**: Improved log management with dedicated logs directory
+- **Performance Optimization**: Caching, batch commits, and query optimization for faster response times
 - **Batch API Operations**: Enhanced batch operations for projection management
 - **Data Export**: Export capabilities for projections in multiple formats
 
@@ -223,12 +243,15 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - ✅ Enhanced rookie projection system
 - ✅ Statistical variance and confidence intervals
 - ✅ Complete NFL data integration with NFL API and nfl_data_py
+- ✅ Resource-efficient position-by-position import system
+- ✅ Improved log management with centralized logs directory
 - ✅ Removal of web scraping dependencies for improved reliability
 - ✅ Side-by-side player comparison
 - ✅ Dashboard analytics view
 - ✅ Modern navigation structure
-- ✅ Performance optimizations (caching, query improvements)
-- ✅ Batch operations and data export
+- ✅ Performance optimizations (caching, batch commits, query improvements)
+- ✅ Batch operations and data export 
+- ✅ Complete database population process for 2024 season
 
 ### Planned Features
 - Complete regression analysis implementation

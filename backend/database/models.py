@@ -1,20 +1,18 @@
-from sqlalchemy import Column, Integer, Float, String, ForeignKey, DateTime, JSON, Boolean, Date
+from sqlalchemy import Column, Integer, Float, String, ForeignKey, DateTime, JSON, Boolean, Date, Enum
 from sqlalchemy.orm import relationship, mapped_column, Mapped
 from datetime import datetime, date
 from typing import Dict, Optional
 from .database import Base
 import uuid
+import enum
 
-class ImportLog(Base):
-    """Log for import operations and errors"""
-    __tablename__ = "import_logs"
-    
-    log_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    operation: Mapped[str] = mapped_column(String, nullable=False)
-    status: Mapped[str] = mapped_column(String, nullable=False)  # success, failure, warning
-    message: Mapped[str] = mapped_column(String, nullable=False)
-    details: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+class DraftStatus(str, enum.Enum):
+    """Status of a player in a fantasy draft"""
+    AVAILABLE = "available"
+    DRAFTED = "drafted"
+    WATCHED = "watched"
+
+# First ImportLog class removed to fix duplication error
 
 class GameStats(Base):
     """Game-by-game player statistics"""
@@ -79,12 +77,18 @@ class Player(Base):
     status: Mapped[str] = mapped_column(String, default="Active")  # Active, Injured, Rookie
     depth_chart_position: Mapped[str] = mapped_column(String, default="Backup")  # Starter, Backup, Reserve
     is_fill_player: Mapped[bool] = mapped_column(Boolean, default=False)  # Whether this is a fill player (for team stats reconciliation)
+    is_rookie: Mapped[bool] = mapped_column(Boolean, default=False)  # Whether this is a rookie player
     
     # Draft information fields
     draft_position: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Overall draft position
     draft_team: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # Team that drafted player
     draft_round: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Draft round
     draft_pick: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Pick within round
+    
+    # Draft board fields
+    draft_status: Mapped[str] = mapped_column(Enum(DraftStatus), default=DraftStatus.AVAILABLE)  # available, drafted, watched
+    fantasy_team: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # Fantasy team that drafted the player
+    draft_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Order in which player was drafted
     
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -337,6 +341,8 @@ class Scenario(Base):
     description: Mapped[Optional[str]] = mapped_column(String)
     is_baseline: Mapped[bool] = mapped_column(Boolean, default=False) 
     base_scenario_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    season: Mapped[int] = mapped_column(Integer, nullable=False, default=2024)
+    parameters: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -394,3 +400,31 @@ class RookieProjectionTemplate(Base):
     
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class DraftBoard(Base):
+    """Track draft board status for fantasy drafts"""
+    __tablename__ = "draft_boards"
+    
+    draft_board_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    draft_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    number_of_teams: Mapped[int] = mapped_column(Integer, default=12)
+    roster_spots: Mapped[int] = mapped_column(Integer, default=15)
+    current_pick: Mapped[int] = mapped_column(Integer, default=0)
+    settings: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True)  # scoring rules, position limits, etc.
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class ImportLog(Base):
+    """Track import operations and errors"""
+    __tablename__ = "import_logs"
+    
+    log_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    operation: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)  # success, warning, error
+    message: Mapped[str] = mapped_column(String, nullable=False)
+    details: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

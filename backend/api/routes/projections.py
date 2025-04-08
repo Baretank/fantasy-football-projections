@@ -189,7 +189,7 @@ async def create_rookie_projections(
 @router.put("/rookies/{player_id}/enhance", response_model=RookieProjectionResponse)
 async def enhance_rookie_projection(
     player_id: str,
-    comp_level: str = Query("medium", regex="^(high|medium|low)$"),
+    comp_level: str = Query("medium", pattern="^(high|medium|low)$"),
     playing_time_pct: float = Query(0.5, ge=0.0, le=1.0),
     season: int = Query(..., ge=2023),
     db: Session = Depends(get_db)

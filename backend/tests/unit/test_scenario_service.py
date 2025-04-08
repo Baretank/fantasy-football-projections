@@ -59,7 +59,7 @@ class TestScenarioService:
                 season=2024,
                 games=16,
                 half_ppr=320.5,
-                carries=280,
+                rush_attempts=280,
                 rush_yards=1400,
                 rush_td=14,
                 targets=110,
@@ -273,110 +273,114 @@ class TestScenarioService:
         assert remaining_overrides == 0
 
     @pytest.fixture(scope="function")
-    async def setup_for_compare_scenarios(self, service, sample_players):
+    def setup_for_compare_scenarios(self, service, sample_players):
         """Setup for scenario comparison test."""
-        # Create a new baseline scenario
-        base_scenario = await service.create_scenario(
-            name="Baseline 2024",
-            description="Standard baseline projections",
-            is_baseline=True
-        )
-        
-        # Create an alternative scenario
-        alt_scenario = await service.create_scenario(
-            name="Alternative Scenario",
-            description="Higher scoring environment",
-            is_baseline=False
-        )
-        
-        # Get player IDs
-        mahomes_id = sample_players["ids"]["Patrick Mahomes"]
-        kelce_id = sample_players["ids"]["Travis Kelce"]
-        mccaffrey_id = sample_players["ids"]["Christian McCaffrey"]
-        
-        # Create base projections
-        # Create QB projection
-        qb_proj = Projection(
-            projection_id=str(uuid.uuid4()),
-            player_id=mahomes_id,
-            scenario_id=base_scenario.scenario_id,
-            season=2024,
-            games=17,
-            half_ppr=350.5,
-            pass_attempts=600,
-            completions=400,
-            pass_yards=4800,
-            pass_td=38,
-            interceptions=10,
-            has_overrides=False
-        )
-        
-        # Create RB projection
-        rb_proj = Projection(
-            projection_id=str(uuid.uuid4()),
-            player_id=mccaffrey_id,
-            scenario_id=base_scenario.scenario_id,
-            season=2024,
-            games=16,
-            half_ppr=320.5,
-            carries=280,
-            rush_yards=1400,
-            rush_td=14,
-            targets=110,
-            receptions=88,
-            rec_yards=750,
-            rec_td=5,
-            has_overrides=False
-        )
-        
-        # Create TE projection
-        te_proj = Projection(
-            projection_id=str(uuid.uuid4()),
-            player_id=kelce_id,
-            scenario_id=base_scenario.scenario_id,
-            season=2024,
-            games=16,
-            half_ppr=245.0,
-            targets=140,
-            receptions=98,
-            rec_yards=1200,
-            rec_td=10,
-            has_overrides=False
-        )
-        
-        service.db.add(qb_proj)
-        service.db.add(rb_proj)
-        service.db.add(te_proj)
-        service.db.commit()
-        
-        # Clone base projections to alternative scenario
-        cloned_scenario = await service.clone_scenario(
-            source_scenario_id=base_scenario.scenario_id,
-            new_name=alt_scenario.name,
-            new_description=alt_scenario.description
-        )
-        
-        # Get projections in the alternative scenario
-        alt_projections = await service.get_scenario_projections(cloned_scenario.scenario_id)
-        alt_qb_proj = next(p for p in alt_projections if p.player.position == "QB")
-        
-        # Apply an override to increase passing TDs
-        override = await service.override_service.create_override(
-            player_id=alt_qb_proj.player_id,
-            projection_id=alt_qb_proj.projection_id,
-            stat_name="pass_td",
-            manual_value=48,  # Higher than the 38 in baseline
-            notes="Aggressive TD projection"
-        )
-        
-        # Return the setup data
-        return {
-            "base_scenario": base_scenario,
-            "alt_scenario": cloned_scenario,
-            "base_projections": [qb_proj, rb_proj, te_proj],
-            "alt_projections": alt_projections,
-            "override": override
-        }
+        @pytest.mark.asyncio
+        async def _setup():
+            # Create a new baseline scenario
+            base_scenario = await service.create_scenario(
+                name="Baseline 2024",
+                description="Standard baseline projections",
+                is_baseline=True
+            )
+            
+            # Create an alternative scenario
+            alt_scenario = await service.create_scenario(
+                name="Alternative Scenario",
+                description="Higher scoring environment",
+                is_baseline=False
+            )
+            
+            # Get player IDs
+            mahomes_id = sample_players["ids"]["Patrick Mahomes"]
+            kelce_id = sample_players["ids"]["Travis Kelce"]
+            mccaffrey_id = sample_players["ids"]["Christian McCaffrey"]
+            
+            # Create base projections
+            # Create QB projection
+            qb_proj = Projection(
+                projection_id=str(uuid.uuid4()),
+                player_id=mahomes_id,
+                scenario_id=base_scenario.scenario_id,
+                season=2024,
+                games=17,
+                half_ppr=350.5,
+                pass_attempts=600,
+                completions=400,
+                pass_yards=4800,
+                pass_td=38,
+                interceptions=10,
+                has_overrides=False
+            )
+            
+            # Create RB projection
+            rb_proj = Projection(
+                projection_id=str(uuid.uuid4()),
+                player_id=mccaffrey_id,
+                scenario_id=base_scenario.scenario_id,
+                season=2024,
+                games=16,
+                half_ppr=320.5,
+                rush_attempts=280,
+                rush_yards=1400,
+                rush_td=14,
+                targets=110,
+                receptions=88,
+                rec_yards=750,
+                rec_td=5,
+                has_overrides=False
+            )
+            
+            # Create TE projection
+            te_proj = Projection(
+                projection_id=str(uuid.uuid4()),
+                player_id=kelce_id,
+                scenario_id=base_scenario.scenario_id,
+                season=2024,
+                games=16,
+                half_ppr=245.0,
+                targets=140,
+                receptions=98,
+                rec_yards=1200,
+                rec_td=10,
+                has_overrides=False
+            )
+            
+            service.db.add(qb_proj)
+            service.db.add(rb_proj)
+            service.db.add(te_proj)
+            service.db.commit()
+            
+            # Clone base projections to alternative scenario
+            cloned_scenario = await service.clone_scenario(
+                source_scenario_id=base_scenario.scenario_id,
+                new_name=alt_scenario.name,
+                new_description=alt_scenario.description
+            )
+            
+            # Get projections in the alternative scenario
+            alt_projections = await service.get_scenario_projections(cloned_scenario.scenario_id)
+            alt_qb_proj = next(p for p in alt_projections if p.player.position == "QB")
+            
+            # Apply an override to increase passing TDs
+            override = await service.override_service.create_override(
+                player_id=alt_qb_proj.player_id,
+                projection_id=alt_qb_proj.projection_id,
+                stat_name="pass_td",
+                manual_value=48,  # Higher than the 38 in baseline
+                notes="Aggressive TD projection"
+            )
+            
+            # Return the setup data
+            return {
+                "base_scenario": base_scenario,
+                "alt_scenario": cloned_scenario,
+                "base_projections": [qb_proj, rb_proj, te_proj],
+                "alt_projections": alt_projections,
+                "override": override
+            }
+            
+        return _setup()
 
     @pytest.mark.asyncio
     async def test_compare_scenarios(self, service, setup_for_compare_scenarios):
@@ -434,63 +438,67 @@ class TestScenarioService:
         assert any(s.scenario_id == alt_scenario.scenario_id for s in scenarios)
 
     @pytest.fixture(scope="function")
-    async def setup_for_fill_players(self, service, sample_players, team_stats_2024):
+    def setup_for_fill_players(self, service, sample_players, team_stats_2024):
         """Setup for fill player test with a fresh scenario."""
-        # Create a new scenario
-        scenario = await service.create_scenario(
-            name="Fill Player Test Scenario",
-            description="Testing fill player generation",
-            is_baseline=True
-        )
-        
-        # Add projections for Patrick Mahomes and Travis Kelce
-        # but with fewer stats than team totals
-        mahomes_id = sample_players["ids"]["Patrick Mahomes"]
-        kelce_id = sample_players["ids"]["Travis Kelce"]
-        
-        # Create QB projection with half the team pass attempts/yards/TDs
-        qb_proj = Projection(
-            projection_id=str(uuid.uuid4()),
-            player_id=mahomes_id,
-            scenario_id=scenario.scenario_id,
-            season=2024,
-            games=17,
-            half_ppr=350.5,
-            pass_attempts=team_stats_2024.pass_attempts * 0.5,  # Half of team total
-            completions=300,
-            pass_yards=team_stats_2024.pass_yards * 0.5,  # Half of team total
-            pass_td=team_stats_2024.pass_td * 0.5,  # Half of team total
-            interceptions=10,
-            has_overrides=False
-        )
-        
-        # Create TE projection with minimal stats
-        te_proj = Projection(
-            projection_id=str(uuid.uuid4()),
-            player_id=kelce_id,
-            scenario_id=scenario.scenario_id,
-            season=2024,
-            games=16,
-            half_ppr=245.0,
-            targets=140,
-            receptions=98,
-            rec_yards=1000,
-            rec_td=8,
-            has_overrides=False
-        )
-        
-        # Add projections to database
-        service.db.add(qb_proj)
-        service.db.add(te_proj)
-        service.db.commit()
-        
-        # Return setup information
-        return {
-            "scenario": scenario,
-            "projections": [qb_proj, te_proj],
-            "mahomes_proj": qb_proj,
-            "kelce_proj": te_proj
-        }
+        @pytest.mark.asyncio
+        async def _setup():
+            # Create a new scenario
+            scenario = await service.create_scenario(
+                name="Fill Player Test Scenario",
+                description="Testing fill player generation",
+                is_baseline=True
+            )
+            
+            # Add projections for Patrick Mahomes and Travis Kelce
+            # but with fewer stats than team totals
+            mahomes_id = sample_players["ids"]["Patrick Mahomes"]
+            kelce_id = sample_players["ids"]["Travis Kelce"]
+            
+            # Create QB projection with half the team pass attempts/yards/TDs
+            qb_proj = Projection(
+                projection_id=str(uuid.uuid4()),
+                player_id=mahomes_id,
+                scenario_id=scenario.scenario_id,
+                season=2024,
+                games=17,
+                half_ppr=350.5,
+                pass_attempts=team_stats_2024.pass_attempts * 0.5,  # Half of team total
+                completions=300,
+                pass_yards=team_stats_2024.pass_yards * 0.5,  # Half of team total
+                pass_td=team_stats_2024.pass_td * 0.5,  # Half of team total
+                interceptions=10,
+                has_overrides=False
+            )
+            
+            # Create TE projection with minimal stats
+            te_proj = Projection(
+                projection_id=str(uuid.uuid4()),
+                player_id=kelce_id,
+                scenario_id=scenario.scenario_id,
+                season=2024,
+                games=16,
+                half_ppr=245.0,
+                targets=140,
+                receptions=98,
+                rec_yards=1000,
+                rec_td=8,
+                has_overrides=False
+            )
+            
+            # Add projections to database
+            service.db.add(qb_proj)
+            service.db.add(te_proj)
+            service.db.commit()
+            
+            # Return setup information
+            return {
+                "scenario": scenario,
+                "projections": [qb_proj, te_proj],
+                "mahomes_proj": qb_proj,
+                "kelce_proj": te_proj
+            }
+            
+        return _setup()
 
     @pytest.mark.asyncio
     async def test_generate_fill_players(self, service, setup_for_fill_players, team_stats_2024):
@@ -535,7 +543,7 @@ class TestScenarioService:
             "pass_attempts": 0,
             "pass_yards": 0,
             "pass_td": 0,
-            "carries": 0,  # Using carries instead of rush_attempts
+            "rush_attempts": 0,  # Using standardized field name instead of "carries"
             "rush_yards": 0,
             "rush_td": 0,
             "targets": 0,
@@ -553,6 +561,6 @@ class TestScenarioService:
         assert abs(team_totals["pass_attempts"] - team_stats_2024.pass_attempts) < 0.1
         assert abs(team_totals["pass_yards"] - team_stats_2024.pass_yards) < 0.1
         assert abs(team_totals["pass_td"] - team_stats_2024.pass_td) < 0.1
-        assert abs(team_totals["carries"] - team_stats_2024.carries) < 0.1  # Using carries instead of rush_attempts
+        assert abs(team_totals["rush_attempts"] - team_stats_2024.rush_attempts) < 0.1  # Using standardized field name
         assert abs(team_totals["rush_yards"] - team_stats_2024.rush_yards) < 0.1
         assert abs(team_totals["rush_td"] - team_stats_2024.rush_td) < 0.1

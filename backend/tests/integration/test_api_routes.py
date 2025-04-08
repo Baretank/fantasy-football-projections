@@ -113,7 +113,7 @@ class TestProjectionRoutes:
             pass_yards=4800.0,
             pass_td=38.0,
             interceptions=10.0,
-            rush_attempts=60.0,  # Changed from carries to rush_attempts
+            rush_attempts=60.0,  # Changed from rush_attempts to rush_attempts
             rush_yards=350.0,
             rush_td=3.0
         )
@@ -146,7 +146,7 @@ class TestProjectionRoutes:
                     pass_yards=4800.0,
                     pass_td=38.0,
                     interceptions=10.0,
-                    rush_attempts=60.0,  # Changed from carries to rush_attempts
+                    rush_attempts=60.0,  # Changed from rush_attempts to rush_attempts
                     rush_yards=350.0,
                     rush_td=3.0
                 )
@@ -257,7 +257,7 @@ class TestOverrideRoutes:
             pass_yards=4800.0,
             pass_td=38.0,
             interceptions=10.0,
-            rush_attempts=60.0,  # Changed from carries to rush_attempts
+            rush_attempts=60.0,  # Changed from rush_attempts to rush_attempts
             rush_yards=350.0,
             rush_td=3.0
         )

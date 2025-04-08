@@ -5,7 +5,7 @@ This directory contains utility scripts for data import, validation, and mainten
 ## Data Import Scripts
 
 ### import_nfl_data.py
-Imports player statistics from official NFL data sources using the NFL API and nfl_data_py package.
+Imports all player statistics from official NFL data sources using the NFL API and nfl_data_py package.
 
 ```bash
 # Import complete data for 2023 season
@@ -25,6 +25,46 @@ python backend/scripts/import_nfl_data.py --seasons 2023 --type totals
 
 # Validate imported data
 python backend/scripts/import_nfl_data.py --seasons 2023 --type validate
+```
+
+### import_by_position.py
+Imports NFL player statistics position-by-position to optimize memory usage and performance.
+
+```bash
+# Import team data only
+python backend/scripts/import_by_position.py --season 2023 --position team
+
+# Import QB data
+python backend/scripts/import_by_position.py --season 2023 --position QB
+
+# Import RB data
+python backend/scripts/import_by_position.py --season 2023 --position RB
+
+# Import WR data
+python backend/scripts/import_by_position.py --season 2023 --position WR
+
+# Import TE data
+python backend/scripts/import_by_position.py --season 2023 --position TE
+
+# Import all positions sequentially
+python backend/scripts/import_by_position.py --season 2023 --position all
+```
+
+### check_import.py
+Verifies database contents after import operations for validation and monitoring.
+
+```bash
+# Basic check
+python backend/scripts/check_import.py
+
+# Check with position filter
+python backend/scripts/check_import.py --position QB --season 2023
+
+# Check specific player
+python backend/scripts/check_import.py --player "Patrick Mahomes"
+
+# Show import logs
+python backend/scripts/check_import.py --logs
 ```
 
 ### setup_nfl_data.py
@@ -90,13 +130,17 @@ The scripts have been updated to implement a comprehensive NFL data integration 
   - ✅ Rate limiting and backoff strategies
   - ✅ Robust error handling and retry mechanisms
   - ✅ Support for background processing of long-running imports
+  - ✅ Position-by-position imports for resource optimization
+  - ✅ Memory-efficient processing with batch commits
   - ✅ Detailed metrics tracking and logging
+  - ✅ Centralized log file management in backend/logs
 
 - **Data Transformation**:
   - ✅ Advanced data transformation and mapping
   - ✅ Fantasy point calculation
   - ✅ Derived statistics calculation
   - ✅ Data validation and consistency checks
+  - ✅ Baseline scenario generation for projections
 
 ## Future Enhancements
 

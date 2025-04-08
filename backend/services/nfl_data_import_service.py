@@ -183,12 +183,13 @@ class NFLDataImportService:
             # Close API adapter session
             await self.nfl_api_adapter.close()
     
-    async def import_players(self, season: int) -> Dict[str, Any]:
+    async def import_players(self, season: int, limit: Optional[int] = None) -> Dict[str, Any]:
         """
         Import player data for the specified season.
         
         Args:
             season: NFL season year (e.g., 2023)
+            limit: Optional limit of players to import (for testing purposes)
             
         Returns:
             Dictionary containing import results
@@ -199,18 +200,32 @@ class NFLDataImportService:
             player_data = await self.nfl_data_adapter.get_players(season)
             self.metrics["requests_made"] += 1
             
+            # Apply limit if specified (for testing with small batches)
+            if limit:
+                self.logger.info(f"Test mode: limiting import to {limit} players")
+                player_data = player_data.head(limit)
+            
             # Process and transform data
             players_added = 0
             players_updated = 0
             
             for _, row in player_data.iterrows():
-                # Skip rows with missing player_id
-                if pd.isna(row.get('player_id')):
+                # Use GSIS ID if available, otherwise use other unique identifiers
+                player_id = None
+                if not pd.isna(row.get('gsis_id')):
+                    player_id = row['gsis_id']
+                elif not pd.isna(row.get('smart_id')):
+                    player_id = row['smart_id']
+                elif not pd.isna(row.get('esb_id')):
+                    player_id = row['esb_id']
+                else:
+                    # If no ID is available, generate a unique ID
+                    self.logger.warning(f"No player ID found for {row.get('display_name', 'Unknown')}. Skipping.")
                     continue
                     
                 # Check if player exists
                 existing_player = self.db.query(Player).filter(
-                    Player.player_id == row['player_id']
+                    Player.player_id == player_id
                 ).first()
                 
                 # Convert height
@@ -219,13 +234,16 @@ class NFLDataImportService:
                     feet, inches = row['height'].split('-')
                     height_inches = int(feet) * 12 + int(inches)
                 
-                # Prepare player data
+                # Get team information - team_abbr is the field in the API
+                team = row.get('team_abbr') if not pd.isna(row.get('team_abbr')) else "UNK"
+                
+                # Prepare player data with default for status field to avoid NULL constraint error
                 player_data = {
-                    "player_id": row['player_id'],
+                    "player_id": player_id,
                     "name": row['display_name'] if not pd.isna(row.get('display_name')) else "Unknown",
                     "position": row['position'] if not pd.isna(row.get('position')) else "UNK",
-                    "team": row['team'] if not pd.isna(row.get('team')) else "UNK",
-                    "status": row.get('status'),
+                    "team": team,
+                    "status": row.get('status') if not pd.isna(row.get('status')) else "Unknown",
                     "height": height_inches,
                     "weight": row.get('weight') if not pd.isna(row.get('weight')) else None
                 }
@@ -242,7 +260,12 @@ class NFLDataImportService:
                     players_added += 1
                 
                 self.metrics["players_processed"] += 1
+                
+                # Commit every 100 players to avoid memory issues with large datasets
+                if self.metrics["players_processed"] % 100 == 0:
+                    self.db.commit()
             
+            # Final commit
             self.db.commit()
             
             results = {
@@ -262,16 +285,19 @@ class NFLDataImportService:
             self.db.rollback()
             self.metrics["errors"] += 1
             self.logger.error(f"Error importing player data: {str(e)}")
+            import traceback
+            self.logger.debug(f"Stack trace: {traceback.format_exc()}")
             self._log_import("player_import", "error", 
                            f"Error importing player data: {str(e)}")
             raise Exception(f"Error importing player data: {str(e)}")
     
-    async def import_weekly_stats(self, season: int) -> Dict[str, Any]:
+    async def import_weekly_stats(self, season: int, player_limit: Optional[int] = None) -> Dict[str, Any]:
         """
         Import weekly statistics for the specified season.
         
         Args:
             season: NFL season year (e.g., 2023)
+            player_limit: Optional limit on number of players to process (for testing)
             
         Returns:
             Dictionary containing import results
@@ -308,6 +334,17 @@ class NFLDataImportService:
             # Process and transform data
             stats_added = 0
             errors = 0
+            
+            # If player_limit is specified, get only limited players
+            if player_limit:
+                self.logger.info(f"Limiting weekly stats import to {player_limit} players")
+                players = self.db.query(Player).filter(
+                    Player.position.in_(["QB", "RB", "WR", "TE"])
+                ).limit(player_limit).all()
+                player_ids = [p.player_id for p in players]
+                self.logger.info(f"Selected {len(player_ids)} players for limited import")
+                # Filter weekly_data to only include these players
+                weekly_data = weekly_data[weekly_data['player_id'].isin(player_ids)]
             
             for _, row in weekly_data.iterrows():
                 # Skip rows with missing player_id
@@ -380,6 +417,8 @@ class NFLDataImportService:
                         
                 except Exception as e:
                     self.logger.error(f"Error processing game stat for {player.name} week {week}: {str(e)}")
+                    import traceback
+                    self.logger.debug(f"Stack trace: {traceback.format_exc()}")
                     errors += 1
             
             # Final commit
@@ -401,6 +440,8 @@ class NFLDataImportService:
             self.db.rollback()
             self.metrics["errors"] += 1
             self.logger.error(f"Error importing weekly stats: {str(e)}")
+            import traceback
+            self.logger.debug(f"Stack trace: {traceback.format_exc()}")
             self._log_import("weekly_stats_import", "error", 
                            f"Error importing weekly stats: {str(e)}")
             raise Exception(f"Error importing weekly stats: {str(e)}")
@@ -423,7 +464,7 @@ class NFLDataImportService:
             teams_processed = 0
             
             for _, row in team_data.iterrows():
-                team_abbr = row.get('team_abbr')
+                team_abbr = row.get('team')
                 if pd.isna(team_abbr):
                     continue
                     
@@ -433,39 +474,26 @@ class NFLDataImportService:
                     TeamStat.season == season
                 ).first()
                 
-                # Calculate pass percentage
-                plays_offense = float(row.get('plays_offense', 0)) if not pd.isna(row.get('plays_offense')) else 0
-                pass_attempts = float(row.get('attempts_offense', 0)) if not pd.isna(row.get('attempts_offense')) else 0
-                pass_percentage = (pass_attempts / plays_offense * 100) if plays_offense > 0 else 0
-                
-                # Calculate pass TD rate
-                pass_tds = float(row.get('pass_tds_offense', 0)) if not pd.isna(row.get('pass_tds_offense')) else 0
-                pass_td_rate = (pass_tds / pass_attempts * 100) if pass_attempts > 0 else 0
-                
-                # Calculate yards per carry
-                rush_attempts = float(row.get('rushes_offense', 0)) if not pd.isna(row.get('rushes_offense')) else 0
-                rush_yards = float(row.get('rush_yards_offense', 0)) if not pd.isna(row.get('rush_yards_offense')) else 0
-                rush_yards_per_carry = (rush_yards / rush_attempts) if rush_attempts > 0 else 0
-                
-                # Prepare team stat data
+                # The data already contains the calculated fields from our adapter
+                # Just prepare team stat data for our model
                 team_stat_data = {
                     "team": team_abbr,
                     "season": season,
-                    "plays": plays_offense,
-                    "pass_percentage": pass_percentage,
-                    "pass_attempts": pass_attempts,
-                    "pass_yards": float(row.get('pass_yards_offense', 0)) if not pd.isna(row.get('pass_yards_offense')) else 0,
-                    "pass_td": pass_tds,
-                    "pass_td_rate": pass_td_rate,
-                    "rush_attempts": rush_attempts,
-                    "rush_yards": rush_yards,
-                    "rush_td": float(row.get('rush_tds_offense', 0)) if not pd.isna(row.get('rush_tds_offense')) else 0,
-                    "rush_yards_per_carry": rush_yards_per_carry,
-                    "targets": float(row.get('targets_offense', 0)) if not pd.isna(row.get('targets_offense')) else 0,
-                    "receptions": float(row.get('receptions_offense', 0)) if not pd.isna(row.get('receptions_offense')) else 0,
-                    "rec_yards": float(row.get('receiving_yards_offense', 0)) if not pd.isna(row.get('receiving_yards_offense')) else 0,
-                    "rec_td": float(row.get('receiving_tds_offense', 0)) if not pd.isna(row.get('receiving_tds_offense')) else 0,
-                    "rank": int(row.get('rankTeam', 0)) if not pd.isna(row.get('rankTeam')) else 0
+                    "plays": float(row.get('plays', 0)) if not pd.isna(row.get('plays')) else 0,
+                    "pass_percentage": float(row.get('pass_percentage', 0)) if not pd.isna(row.get('pass_percentage')) else 0,
+                    "pass_attempts": float(row.get('pass_attempts', 0)) if not pd.isna(row.get('pass_attempts')) else 0,
+                    "pass_yards": float(row.get('pass_yards', 0)) if not pd.isna(row.get('pass_yards')) else 0,
+                    "pass_td": float(row.get('pass_td', 0)) if not pd.isna(row.get('pass_td')) else 0,
+                    "pass_td_rate": float(row.get('pass_td_rate', 0)) if not pd.isna(row.get('pass_td_rate')) else 0,
+                    "rush_attempts": float(row.get('rush_attempts', 0)) if not pd.isna(row.get('rush_attempts')) else 0,
+                    "rush_yards": float(row.get('rush_yards', 0)) if not pd.isna(row.get('rush_yards')) else 0,
+                    "rush_td": float(row.get('rush_td', 0)) if not pd.isna(row.get('rush_td')) else 0,
+                    "rush_yards_per_carry": float(row.get('rush_yards_per_carry', 0)) if not pd.isna(row.get('rush_yards_per_carry')) else 0,
+                    "targets": float(row.get('targets', 0)) if not pd.isna(row.get('targets')) else 0,
+                    "receptions": float(row.get('receptions', 0)) if not pd.isna(row.get('receptions')) else 0,
+                    "rec_yards": float(row.get('rec_yards', 0)) if not pd.isna(row.get('rec_yards')) else 0,
+                    "rec_td": float(row.get('rec_td', 0)) if not pd.isna(row.get('rec_td')) else 0,
+                    "rank": int(row.get('rank', 0)) if not pd.isna(row.get('rank')) else 0
                 }
                 
                 if existing_stats:
@@ -559,7 +587,7 @@ class NFLDataImportService:
                     }
                     
                     # Calculate efficiency metrics
-                    if totals["pass_attempts"] > 0:
+                    if "pass_attempts" in totals and totals["pass_attempts"] > 0:
                         totals["comp_pct"] = round(totals["completions"] / totals["pass_attempts"] * 100, 1)
                         totals["yards_per_att"] = round(totals["pass_yards"] / totals["pass_attempts"], 1)
                         totals["pass_td_rate"] = round(totals["pass_td"] / totals["pass_attempts"] * 100, 1)
@@ -578,9 +606,9 @@ class NFLDataImportService:
                     }
                     
                     # Calculate efficiency metrics
-                    if totals["rush_attempts"] > 0:
+                    if "rush_attempts" in totals and totals["rush_attempts"] > 0:
                         totals["yards_per_carry"] = round(totals["rush_yards"] / totals["rush_attempts"], 1)
-                    if totals["targets"] > 0:
+                    if "targets" in totals and totals["targets"] > 0:
                         totals["catch_rate"] = round(totals["receptions"] / totals["targets"] * 100, 1)
                     
                 else:  # WR and TE
@@ -601,10 +629,10 @@ class NFLDataImportService:
                         })
                     
                     # Calculate efficiency metrics
-                    if totals["targets"] > 0:
+                    if "targets" in totals and totals["targets"] > 0:
                         totals["catch_rate"] = round(totals["receptions"] / totals["targets"] * 100, 1)
                         totals["yards_per_target"] = round(totals["rec_yards"] / totals["targets"], 1)
-                    if totals["receptions"] > 0:
+                    if "receptions" in totals and totals["receptions"] > 0:
                         totals["yards_per_reception"] = round(totals["rec_yards"] / totals["receptions"], 1)
                 
                 # Calculate half-PPR fantasy points
@@ -614,7 +642,8 @@ class NFLDataImportService:
                 existing_stats = self._get_player_base_stats(player.player_id, season)
                 
                 # Update base stats in database
-                if existing_stats:
+                # Check if existing_stats has elements
+                if existing_stats and len(existing_stats) > 0:
                     # Update existing base stats
                     for stat_name, value in totals.items():
                         self._update_base_stat(existing_stats, stat_name, value)
@@ -885,6 +914,186 @@ class NFLDataImportService:
         
         return round(points, 1)
         
+    async def import_player_data(self, player_id: str, season: int) -> bool:
+        """
+        Import data for a specific player.
+        
+        Args:
+            player_id: The player ID to import data for
+            season: The season year
+            
+        Returns:
+            Boolean indicating success or failure
+        """
+        try:
+            # Check if player exists
+            player = self.db.query(Player).filter(Player.player_id == player_id).first()
+            if not player:
+                self.logger.error(f"Player {player_id} not found in database")
+                return False
+                
+            # Log the operation
+            self.logger.info(f"Importing data for player {player.name} (ID: {player_id}) for season {season}")
+            
+            # Get weekly stats for this player
+            weekly_data = await self.nfl_data_adapter.get_player_weekly_stats(player_id, season)
+            if weekly_data is None or weekly_data.empty:
+                self.logger.warning(f"No weekly stats found for player {player.name}")
+                return False
+                
+            # Process weekly stats
+            for _, row in weekly_data.iterrows():
+                # Skip if week is missing
+                if pd.isna(row.get('week')):
+                    continue
+                    
+                week = int(row['week'])
+                
+                # Check if weekly stat already exists
+                existing_stat = self.db.query(GameStats).filter(
+                    GameStats.player_id == player_id,
+                    GameStats.season == season,
+                    GameStats.week == week
+                ).first()
+                
+                if existing_stat:
+                    continue  # Skip if already imported
+                
+                # Get position-specific stats
+                position = player.position
+                stats = {}
+                
+                # Import all available stat columns for this position
+                for our_name, nfl_name in self.stat_mappings.get(position, {}).items():
+                    if nfl_name in row and not pd.isna(row[nfl_name]):
+                        stats[our_name] = float(row[nfl_name])
+                
+                # Create new game stat
+                game_stat = GameStats(
+                    game_stat_id=str(uuid.uuid4()),
+                    player_id=player_id,
+                    season=season,
+                    week=week,
+                    opponent="UNK",  # We don't have this from player weekly stats
+                    game_location="unknown",
+                    result="unknown",
+                    team_score=0,
+                    opponent_score=0,
+                    stats=stats
+                )
+                
+                self.db.add(game_stat)
+                self.metrics["game_stats_processed"] += 1
+            
+            # Commit all new game stats
+            self.db.commit()
+            
+            # Now calculate season totals for this player
+            # Get all game stats
+            game_stats = self.db.query(GameStats).filter(
+                GameStats.player_id == player_id,
+                GameStats.season == season
+            ).all()
+            
+            if not game_stats:
+                return True  # No game stats to process
+                
+            # Count games and aggregate stats
+            games_played = len(game_stats)
+            position = player.position
+            
+            # Initialize totals dictionary
+            totals = {}
+            
+            # Aggregate stats based on position (code similar to calculate_season_totals)
+            if position == "QB":
+                totals = {
+                    "pass_attempts": sum(g.stats.get("pass_attempts", 0) for g in game_stats),
+                    "completions": sum(g.stats.get("completions", 0) for g in game_stats),
+                    "pass_yards": sum(g.stats.get("pass_yards", 0) for g in game_stats),
+                    "pass_td": sum(g.stats.get("pass_td", 0) for g in game_stats),
+                    "interceptions": sum(g.stats.get("interceptions", 0) for g in game_stats),
+                    "rush_attempts": sum(g.stats.get("rush_attempts", 0) for g in game_stats),
+                    "rush_yards": sum(g.stats.get("rush_yards", 0) for g in game_stats),
+                    "rush_td": sum(g.stats.get("rush_td", 0) for g in game_stats),
+                }
+            elif position == "RB":
+                totals = {
+                    "rush_attempts": sum(g.stats.get("rush_attempts", 0) for g in game_stats),
+                    "rush_yards": sum(g.stats.get("rush_yards", 0) for g in game_stats),
+                    "rush_td": sum(g.stats.get("rush_td", 0) for g in game_stats),
+                    "targets": sum(g.stats.get("targets", 0) for g in game_stats),
+                    "receptions": sum(g.stats.get("receptions", 0) for g in game_stats),
+                    "rec_yards": sum(g.stats.get("rec_yards", 0) for g in game_stats),
+                    "rec_td": sum(g.stats.get("rec_td", 0) for g in game_stats),
+                }
+            else:  # WR and TE
+                totals = {
+                    "targets": sum(g.stats.get("targets", 0) for g in game_stats),
+                    "receptions": sum(g.stats.get("receptions", 0) for g in game_stats),
+                    "rec_yards": sum(g.stats.get("rec_yards", 0) for g in game_stats),
+                    "rec_td": sum(g.stats.get("rec_td", 0) for g in game_stats),
+                }
+                
+                # Add rushing stats for WRs
+                if position == "WR":
+                    totals.update({
+                        "rush_attempts": sum(g.stats.get("rush_attempts", 0) for g in game_stats),
+                        "rush_yards": sum(g.stats.get("rush_yards", 0) for g in game_stats),
+                        "rush_td": sum(g.stats.get("rush_td", 0) for g in game_stats),
+                    })
+            
+            # Calculate half-PPR fantasy points
+            fantasy_points = self._calculate_fantasy_points(totals, position)
+            
+            # Create or update BaseStat records
+            existing_stats = self._get_player_base_stats(player_id, season)
+            
+            # Update base stats in database
+            if existing_stats and len(existing_stats) > 0:
+                # Update existing base stats
+                for stat_name, value in totals.items():
+                    self._update_base_stat(existing_stats, stat_name, value)
+                    
+                # Update games and half_ppr
+                games_stat = next((s for s in existing_stats if s.stat_type == "games"), None)
+                if games_stat:
+                    games_stat.value = games_played
+                else:
+                    self._create_base_stat(player_id, season, "games", games_played)
+                    
+                half_ppr_stat = next((s for s in existing_stats if s.stat_type == "half_ppr"), None)
+                if half_ppr_stat:
+                    half_ppr_stat.value = fantasy_points
+                else:
+                    self._create_base_stat(player_id, season, "half_ppr", fantasy_points)
+            else:
+                # Create new base stats for all values
+                for stat_name, value in totals.items():
+                    self._create_base_stat(player_id, season, stat_name, value)
+                
+                # Add games and half_ppr
+                self._create_base_stat(player_id, season, "games", games_played)
+                self._create_base_stat(player_id, season, "half_ppr", fantasy_points)
+            
+            # Commit changes
+            self.db.commit()
+            
+            # Log success
+            self._log_import("player_data_import", "success", 
+                           f"Successfully imported data for player {player.name} (ID: {player_id})", 
+                           {"season": season, "games": games_played})
+            
+            return True
+            
+        except Exception as e:
+            self.db.rollback()
+            self.metrics["errors"] += 1
+            self.logger.error(f"Error importing player data for {player_id}: {str(e)}")
+            self._log_import("player_data_import", "error", 
+                           f"Error importing player data for {player_id}: {str(e)}")
+            return False
+    
     def _log_import(self, operation: str, status: str, message: str, details: Dict = None) -> None:
         """
         Log an import operation to the database.
