@@ -2,7 +2,16 @@ import pytest
 import time
 import json
 from unittest.mock import patch, MagicMock
-from services.cache_service import CacheService, get_cache
+from services.cache_service import CacheService, get_cache, _cache_instance
+
+
+@pytest.fixture(autouse=True)
+def reset_cache_singleton():
+    """Reset the global cache singleton before each test."""
+    global _cache_instance
+    _cache_instance = None
+    yield
+    _cache_instance = None
 
 
 class TestCacheService:
@@ -34,20 +43,24 @@ class TestCacheService:
         time.sleep(1.1)  # Wait for expiration
         assert cache.get("short_lived") is None
 
-    def test_custom_ttl(self):
-        """Test custom TTL for cache entry."""
-        cache = CacheService(ttl_seconds=300)
-        cache.set("default_ttl", "default_value")
-        cache.set("custom_ttl", "custom_value", ttl_seconds=1)
-        
-        # Both should be available immediately
-        assert cache.get("default_ttl") == "default_value"
-        assert cache.get("custom_ttl") == "custom_value"
-        
-        # Wait for custom TTL to expire
-        time.sleep(1.1)
-        assert cache.get("default_ttl") == "default_value"  # Still available
-        assert cache.get("custom_ttl") is None  # Should be expired
+    def test_custom_ttl_with_mock_time(self):
+        """Test custom TTL with mocked time for reliability."""
+        with patch('time.time') as mock_time:
+            mock_time.return_value = 1000.0  # Start time
+            
+            cache = CacheService(ttl_seconds=300)
+            cache.set("default_ttl", "default_value")
+            cache.set("custom_ttl", "custom_value", ttl_seconds=1)
+            
+            # Both should be available immediately
+            assert cache.get("default_ttl") == "default_value"
+            assert cache.get("custom_ttl") == "custom_value"
+            
+            # Advance time beyond custom TTL
+            mock_time.return_value = 1001.5  # Add 1.5 seconds
+            
+            assert cache.get("default_ttl") == "default_value"  # Still available
+            assert cache.get("custom_ttl") is None  # Should be expired
 
     def test_delete(self):
         """Test deleting a cache entry."""

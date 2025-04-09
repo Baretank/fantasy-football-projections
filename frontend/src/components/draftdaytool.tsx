@@ -75,7 +75,8 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
   const fetchRookies = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/players/rookies');
+      // Use Player Service with is_rookie filter
+      const response = await fetch('http://localhost:8000/api/players?is_rookie=true');
       if (!response.ok) {
         throw new Error('Failed to fetch rookies');
       }
@@ -158,25 +159,43 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
       // Calculate overall draft position if not set
       const defaultDraftPosition = (draftRound * 32) - (32 - draftPick);
       
-      const response = await fetch(`http://localhost:8000/api/players/rookies/${playerId}/draft`, {
-        method: 'PUT',
+      // First update player team and draft position info
+      const updateResponse = await fetch(`http://localhost:8000/api/players/${playerId}`, {
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           team: rookie.team,
           draft_position: rookie.draft_position || defaultDraftPosition,
-          round: draftRound,
-          pick: draftPick,
-          auto_project: true
+          draft_round: draftRound,
+          draft_pick: draftPick,
+          status: 'Rookie'
         }),
       });
       
-      if (!response.ok) {
+      if (!updateResponse.ok) {
         throw new Error('Failed to update rookie');
       }
       
-      const result = await response.json();
+      // Then use the draft API to set the player as 'drafted'
+      const draftResponse = await fetch('/api/draft-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          player_id: playerId,
+          draft_status: 'drafted',
+          create_projection: true
+        }),
+      });
+      
+      if (!draftResponse.ok) {
+        throw new Error('Failed to update draft status');
+      }
+      
+      const result = await draftResponse.json();
       
       // Successfully updated
       toast({
@@ -205,7 +224,7 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
       if (result.projection_created) {
         toast({
           title: 'Projection Created',
-          description: `Created projection for ${rookie.name} (${result.fantasy_points.toFixed(1)} points)`,
+          description: `Created projection for ${rookie.name}`,
         });
       }
       
@@ -229,7 +248,8 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
     if (dirtyIds.length === 0) return;
     
     try {
-      const updates = dirtyIds.map(id => {
+      // First update player information (team, draft position, etc)
+      const playerUpdates = dirtyIds.map(id => {
         const rookie = rookies.find(r => r.player_id === id);
         return {
           player_id: id,
@@ -239,24 +259,42 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
         };
       });
       
-      const response = await fetch('http://localhost:8000/api/players/batch-update', {
+      const playerResponse = await fetch('http://localhost:8000/api/players/batch-update', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(updates),
+        body: JSON.stringify(playerUpdates),
       });
       
-      if (!response.ok) {
+      if (!playerResponse.ok) {
         throw new Error('Failed to update rookies');
       }
       
-      const result = await response.json();
+      const playerResult = await playerResponse.json();
+      
+      // Then update draft status using the draft API
+      const draftStatusUpdates = dirtyIds.map(id => ({
+        player_id: id,
+        draft_status: 'available' as const
+      }));
+      
+      const draftResponse = await fetch('/api/batch-draft-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ updates: draftStatusUpdates }),
+      });
+      
+      if (!draftResponse.ok) {
+        throw new Error('Failed to update draft status');
+      }
       
       // Successfully updated
       toast({
         title: 'Success',
-        description: `Updated ${result.updated_count} rookies`,
+        description: `Updated ${playerResult.updated_count} rookies`,
       });
       
       // Clear all dirty flags

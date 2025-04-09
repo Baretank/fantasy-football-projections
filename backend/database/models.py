@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Float, String, ForeignKey, DateTime, JSON, Boolean, Date, Enum
+from sqlalchemy import Column, Integer, Float, String, ForeignKey, DateTime, JSON, Boolean, Date, Enum, Index
 from sqlalchemy.orm import relationship, mapped_column, Mapped
 from datetime import datetime, date
 from typing import Dict, Optional
@@ -19,9 +19,9 @@ class GameStats(Base):
     __tablename__ = "game_stats"
 
     game_stat_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    player_id: Mapped[str] = mapped_column(ForeignKey("players.player_id"), nullable=False)
-    season: Mapped[int] = mapped_column(Integer, nullable=False)
-    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    player_id: Mapped[str] = mapped_column(ForeignKey("players.player_id"), nullable=False, index=True)
+    season: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    week: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     opponent: Mapped[str] = mapped_column(String, nullable=False)
     game_location: Mapped[str] = mapped_column(String, nullable=False)  # home/away
     result: Mapped[str] = mapped_column(String, nullable=False)  # W/L
@@ -35,6 +35,12 @@ class GameStats(Base):
 
     # Relationships
     player = relationship("Player", back_populates="game_stats")
+    
+    # Composite indexes for common query patterns
+    __table_args__ = (
+        Index('ix_game_stats_player_season', 'player_id', 'season'),
+        Index('ix_game_stats_season_week', 'season', 'week'),
+    )
 
     @classmethod
     def from_game_log(cls, player_id: str, game_log_row: Dict) -> 'GameStats':
@@ -66,18 +72,18 @@ class Player(Base):
     __tablename__ = "players"
 
     player_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name: Mapped[str] = mapped_column(String, nullable=False)
-    team: Mapped[str] = mapped_column(String, nullable=False)
-    position: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    team: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    position: Mapped[str] = mapped_column(String, nullable=False, index=True)
     
     # New fields for enhanced player details
     date_of_birth: Mapped[Optional[date]] = mapped_column(Date, nullable=True)  # Format: YYYY-MM-DD
     height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Height in inches
     weight: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # In pounds
-    status: Mapped[str] = mapped_column(String, default="Active")  # Active, Injured, Rookie
+    status: Mapped[str] = mapped_column(String, default="Active", index=True)  # Active, Injured, Rookie
     depth_chart_position: Mapped[str] = mapped_column(String, default="Backup")  # Starter, Backup, Reserve
     is_fill_player: Mapped[bool] = mapped_column(Boolean, default=False)  # Whether this is a fill player (for team stats reconciliation)
-    is_rookie: Mapped[bool] = mapped_column(Boolean, default=False)  # Whether this is a rookie player
+    is_rookie: Mapped[bool] = mapped_column(Boolean, default=False, index=True)  # Whether this is a rookie player
     
     # Draft information fields
     draft_position: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Overall draft position
@@ -86,8 +92,8 @@ class Player(Base):
     draft_pick: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Pick within round
     
     # Draft board fields
-    draft_status: Mapped[str] = mapped_column(Enum(DraftStatus), default=DraftStatus.AVAILABLE)  # available, drafted, watched
-    fantasy_team: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # Fantasy team that drafted the player
+    draft_status: Mapped[str] = mapped_column(Enum(DraftStatus), default=DraftStatus.AVAILABLE, index=True)  # available, drafted, watched
+    fantasy_team: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)  # Fantasy team that drafted the player
     draft_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Order in which player was drafted
     
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -98,6 +104,14 @@ class Player(Base):
     base_stats = relationship("BaseStat", back_populates="player")
     projections = relationship("Projection", back_populates="player")
     stat_overrides = relationship("StatOverride", back_populates="player")
+    
+    # Composite indexes for common query patterns
+    __table_args__ = (
+        Index('ix_players_position_team', 'position', 'team'),
+        Index('ix_players_position_status', 'position', 'status'),
+        Index('ix_players_team_position', 'team', 'position'),
+        Index('ix_players_draft_status_position', 'draft_status', 'position'),
+    )
 
 class BaseStat(Base):
     """Historical and baseline statistics"""
@@ -119,9 +133,9 @@ class TeamStat(Base):
     __tablename__ = "team_stats"
 
     team_stat_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    team: Mapped[str] = mapped_column(String, nullable=False)
-    season: Mapped[int] = mapped_column(Integer, nullable=False)
-    week: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    team: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    season: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    week: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     
     # Core offensive metrics
     plays: Mapped[float] = mapped_column(Float, nullable=False)
@@ -142,6 +156,13 @@ class TeamStat(Base):
     
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Composite indexes for common query patterns
+    __table_args__ = (
+        Index('ix_team_stats_team_season', 'team', 'season'),
+        Index('ix_team_stats_season_rank', 'season', 'rank'),
+        Index('ix_team_stats_team_season_week', 'team', 'season', 'week'),
+    )
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'TeamStat':
@@ -170,13 +191,13 @@ class Projection(Base):
     __tablename__ = "projections"
 
     projection_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    player_id: Mapped[str] = mapped_column(ForeignKey("players.player_id"), nullable=False)
-    scenario_id: Mapped[Optional[str]] = mapped_column(ForeignKey("scenarios.scenario_id"), nullable=True)
-    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    player_id: Mapped[str] = mapped_column(ForeignKey("players.player_id"), nullable=False, index=True)
+    scenario_id: Mapped[Optional[str]] = mapped_column(ForeignKey("scenarios.scenario_id"), nullable=True, index=True)
+    season: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     games: Mapped[int] = mapped_column(Integer, nullable=False)
     
     # Fantasy points
-    half_ppr: Mapped[float] = mapped_column(Float, nullable=False)
+    half_ppr: Mapped[float] = mapped_column(Float, nullable=False, index=True)
     
     # Passing stats (QB)
     pass_attempts: Mapped[Optional[float]] = mapped_column(Float)
@@ -232,8 +253,8 @@ class Projection(Base):
     rec_td_rate: Mapped[Optional[float]] = mapped_column(Float)   # TD% on targets
     
     # Override tracking
-    has_overrides: Mapped[bool] = mapped_column(Boolean, default=False)
-    is_fill_player: Mapped[bool] = mapped_column(Boolean, default=False)
+    has_overrides: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_fill_player: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -242,6 +263,14 @@ class Projection(Base):
     player = relationship("Player", back_populates="projections")
     scenario = relationship("Scenario", back_populates="projections")
     stat_overrides = relationship("StatOverride", back_populates="projection")
+    
+    # Composite indexes for common query patterns
+    __table_args__ = (
+        Index('ix_projections_player_season', 'player_id', 'season'),
+        Index('ix_projections_scenario_season', 'scenario_id', 'season'),
+        Index('ix_projections_season_half_ppr', 'season', 'half_ppr'),
+        Index('ix_projections_player_scenario', 'player_id', 'scenario_id'),
+    )
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'Projection':

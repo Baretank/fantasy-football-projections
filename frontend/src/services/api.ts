@@ -4,7 +4,9 @@ import {
   Scenario,
   StatOverride,
   AdjustmentRequest,
-  BatchOverrideRequest
+  BatchOverrideRequest,
+  DraftStatusUpdate,
+  DraftBoard
 } from '@/types/index';
 
 const API_BASE_URL = 'http://localhost:8000/api';
@@ -229,10 +231,88 @@ export const OverrideService = {
   }
 };
 
+// Draft services
+export const DraftService = {
+  async getDraftBoard(
+    status?: string, 
+    position?: string, 
+    team?: string,
+    orderBy: string = 'ranking',
+    limit: number = 100,
+    offset: number = 0
+  ): Promise<any> {
+    let endpoint = '/draft-board';
+    const params = new URLSearchParams();
+    
+    if (status) params.append('status', status);
+    if (position) params.append('position', position);
+    if (team) params.append('team', team);
+    params.append('order_by', orderBy);
+    params.append('limit', limit.toString());
+    params.append('offset', offset.toString());
+    
+    const queryString = params.toString();
+    if (queryString) endpoint += `?${queryString}`;
+    
+    return fetchApi(endpoint);
+  },
+
+  async updateDraftStatus(
+    update: DraftStatusUpdate
+  ): Promise<any> {
+    return fetchApi(
+      '/draft-status', 
+      'POST', 
+      update
+    );
+  },
+
+  async batchUpdateDraftStatus(
+    updates: DraftStatusUpdate[]
+  ): Promise<any> {
+    return fetchApi(
+      '/batch-draft-status', 
+      'POST', 
+      { updates }
+    );
+  },
+
+  async resetDraft(): Promise<any> {
+    return fetchApi('/reset-draft', 'POST');
+  },
+
+  async undoLastDraftPick(): Promise<any> {
+    return fetchApi('/undo-draft', 'POST');
+  },
+
+  async getDraftProgress(): Promise<any> {
+    return fetchApi('/draft-progress');
+  },
+
+  async createDraftBoard(board: DraftBoard): Promise<any> {
+    return fetchApi('/draft-boards', 'POST', board);
+  },
+
+  async getDraftBoards(activeOnly: boolean = true): Promise<any> {
+    return fetchApi(`/draft-boards?active_only=${activeOnly}`);
+  },
+
+  async getRookieProjectionTemplate(
+    position: string, 
+    draftRound?: number
+  ): Promise<any> {
+    let endpoint = `/rookie-projection-template/${position}`;
+    if (draftRound) endpoint += `?draft_round=${draftRound}`;
+    
+    return fetchApi(endpoint);
+  },
+};
+
 // Export all services
 export default {
   PlayerService,
   ProjectionService,
   ScenarioService,
-  OverrideService
+  OverrideService,
+  DraftService
 };

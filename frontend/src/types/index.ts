@@ -122,6 +122,25 @@ export interface ScenarioComparisonRequest {
   position?: string;
 }
 
+export type DraftStatus = 'available' | 'drafted' | 'watched';
+
+export interface DraftStatusUpdate {
+  player_id: string;
+  draft_status: DraftStatus;
+  fantasy_team?: string;
+  draft_order?: number;
+  create_projection?: boolean;
+}
+
+export interface DraftBoard {
+  name: string;
+  description?: string;
+  season?: number; 
+  settings?: Record<string, any>;
+  number_of_teams?: number;
+  roster_spots?: number;
+}
+
 // Response types
 export interface ScenarioComparisonPlayer {
   player_id: string;

@@ -230,3 +230,27 @@ fantasy-football-projections/
 │   └── public/              # Static assets
 └── data/                    # Local database and data files
 ```
+
+## Recent Implementation Notes (April 2025)
+
+### Database Performance Optimizations
+- Added indexes to key database tables for improved query performance
+- Created a database index application script (`backend/scripts/apply_database_indexes.py`)
+- Added composite indexes for common query patterns to optimize complex lookups
+- Performance test results show significant improvements in query times
+
+### Real NFL Team Stats Integration
+- Enhanced NFLDataPyAdapter to fetch and process real team statistics
+- Added fallback mechanisms to generate team stats from weekly data if needed
+- Ensured proper error handling and data validation
+
+### Testing Improvements
+- Fixed test_custom_ttl in cache service tests that passed individually but failed in test suite
+- Added singleton reset fixture to prevent test state leakage
+- Replaced time-based tests with more reliable mock-based tests
+- Now using typed collections throughout the system  
+
+### Frontend-Backend Integration
+- Connected draft day tools frontend components to backend API
+- Added proper TypeScript interfaces for API integration
+- Created comprehensive API client with proper error handling

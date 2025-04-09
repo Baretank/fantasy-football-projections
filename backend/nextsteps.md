@@ -149,7 +149,7 @@ Use the provided bash script for specific test categories:
 ## Pending Tasks
 
 ### Data Quality Improvements
-- [ ] Replace placeholder team stats with real NFL team stats data
+- [x] Replace placeholder team stats with real NFL team stats data
 - [ ] Improve weekly stats processing to account for player trends
 - [ ] Add rookie data using the rookie import tools
 - [ ] Add historical data (previous seasons) if needed
@@ -158,18 +158,20 @@ Use the provided bash script for specific test categories:
 
 ### Bug Fixes
 - [x] Fix failing test in test_season_upload.py (missing 'services' fixture)
+- [x] Fix test_custom_ttl in cache_service test that passes individually but fails in test suite
 
 ### Draft Day Tools
 - [x] Implement API endpoints for draft day operations
 - [x] Connect to test framework in test_draft_day_tools.py
-- [ ] Connect frontend draft board components to the new API endpoints
+- [x] Connect frontend draft board components to the new API endpoints
 
 ### Performance Improvements
 - [x] Implement performance testing endpoints
 - [x] Connect to test framework in test_performance.py
-- [ ] Optimize database queries for large datasets
-- [ ] Add indices for common query patterns
-- [ ] Monitor and fine-tune cache configuration for optimal performance
+- [x] Optimize database queries for large datasets
+- [x] Add indices for common query patterns
+- [x] Monitor and fine-tune cache configuration for optimal performance
+- [x] Create database index application script
 
 ### Code Quality Improvements
 - [x] Update deprecated FastAPI patterns:
