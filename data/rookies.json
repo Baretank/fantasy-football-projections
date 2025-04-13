@@ -1,0 +1,959 @@
+{
+  "version": "1.0",
+  "last_updated": "2025-04-12",
+  "rookies": [
+    {
+      "name": "Ashton Jeanty",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 12,
+      "projected_stats": {
+        "games": 16,
+        "carries": 227,
+        "rush_yards": 1073,
+        "rush_td": 8,
+        "targets": 50,
+        "receptions": 31,
+        "rec_yards": 347,
+        "rec_td": 2
+      },
+      "height": 68,
+      "weight": 211,
+      "date_of_birth": "2003-12-02"
+    },
+    {
+      "name": "Omarion Hampton",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 45,
+      "projected_stats": {
+        "games": 16,
+        "carries": 175,
+        "rush_yards": 828,
+        "rush_td": 6,
+        "targets": 39,
+        "receptions": 24,
+        "rec_yards": 268,
+        "rec_td": 1
+      },
+      "height": 71,
+      "weight": 221,
+      "date_of_birth": "2003-03-16"
+    },
+    {
+      "name": "Tetairoa McMillan",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 48,
+      "projected_stats": {
+        "games": 16,
+        "targets": 89,
+        "receptions": 64,
+        "rec_yards": 1089,
+        "rec_td": 8,
+        "rush_attempts": 4,
+        "rush_yards": 34,
+        "rush_td": 0
+      },
+      "height": 76,
+      "weight": 219,
+      "date_of_birth": "2003-04-05"
+    },
+    {
+      "name": "TreVeyon Henderson",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 61,
+      "projected_stats": {
+        "games": 16,
+        "carries": 153,
+        "rush_yards": 725,
+        "rush_td": 5,
+        "targets": 34,
+        "receptions": 21,
+        "rec_yards": 234,
+        "rec_td": 1
+      },
+      "height": 70,
+      "weight": 202,
+      "date_of_birth": "2002-10-22"
+    },
+    {
+      "name": "Quinshon Judkins",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 68,
+      "projected_stats": {
+        "games": 16,
+        "carries": 145,
+        "rush_yards": 685,
+        "rush_td": 5,
+        "targets": 32,
+        "receptions": 20,
+        "rec_yards": 221,
+        "rec_td": 1
+      },
+      "height": 71,
+      "weight": 221,
+      "date_of_birth": "2003-10-29"
+    },
+    {
+      "name": "Matthew Golden",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 79,
+      "projected_stats": {
+        "games": 16,
+        "targets": 71,
+        "receptions": 51,
+        "rec_yards": 870,
+        "rec_td": 7,
+        "rush_attempts": 3,
+        "rush_yards": 27,
+        "rush_td": 0
+      },
+      "height": 71,
+      "weight": 191,
+      "date_of_birth": "2003-08-01"
+    },
+    {
+      "name": "Luther Burden III",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 77,
+      "projected_stats": {
+        "games": 16,
+        "targets": 72,
+        "receptions": 52,
+        "rec_yards": 885,
+        "rec_td": 7,
+        "rush_attempts": 4,
+        "rush_yards": 28,
+        "rush_td": 0
+      },
+      "height": 72,
+      "weight": 206,
+      "date_of_birth": "2003-12-12"
+    },
+    {
+      "name": "Emeka Egbuka",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 81,
+      "projected_stats": {
+        "games": 16,
+        "targets": 70,
+        "receptions": 50,
+        "rec_yards": 862,
+        "rec_td": 7,
+        "rush_attempts": 3,
+        "rush_yards": 27,
+        "rush_td": 0
+      },
+      "height": 72,
+      "weight": 202,
+      "date_of_birth": "2002-10-12"
+    },
+    {
+      "name": "Kaleb Johnson",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 75,
+      "projected_stats": {
+        "games": 16,
+        "carries": 138,
+        "rush_yards": 652,
+        "rush_td": 5,
+        "targets": 30,
+        "receptions": 19,
+        "rec_yards": 210,
+        "rec_td": 1
+      },
+      "height": 73,
+      "weight": 224,
+      "date_of_birth": "2003-08-14"
+    },
+    {
+      "name": "Travis Hunter",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 99,
+      "projected_stats": {
+        "games": 16,
+        "targets": 62,
+        "receptions": 44,
+        "rec_yards": 758,
+        "rec_td": 6,
+        "rush_attempts": 3,
+        "rush_yards": 24,
+        "rush_td": 0
+      },
+      "height": 72,
+      "weight": 188,
+      "date_of_birth": "2003-05-18"
+    },
+    {
+      "name": "Tyler Warren",
+      "position": "TE",
+      "team": "FA",
+      "draft_position": 104,
+      "projected_stats": {
+        "games": 16,
+        "targets": 32,
+        "receptions": 25,
+        "rec_yards": 328,
+        "rec_td": 2,
+        "rush_attempts": 1,
+        "rush_yards": 7,
+        "rush_td": 0
+      },
+      "height": 77,
+      "weight": 256,
+      "date_of_birth": "2002-05-24"
+    },
+    {
+      "name": "Cam Skattebo",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 117,
+      "projected_stats": {
+        "games": 16,
+        "carries": 98,
+        "rush_yards": 466,
+        "rush_td": 3,
+        "targets": 21,
+        "receptions": 13,
+        "rec_yards": 150,
+        "rec_td": 1
+      },
+      "height": 69,
+      "weight": 219,
+      "date_of_birth": "2002-02-05"
+    },
+    {
+      "name": "Jayden Higgins",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 146,
+      "projected_stats": {
+        "games": 16,
+        "targets": 44,
+        "receptions": 31,
+        "rec_yards": 540,
+        "rec_td": 4,
+        "rush_attempts": 2,
+        "rush_yards": 17,
+        "rush_td": 0
+      },
+      "height": 76,
+      "weight": 214,
+      "date_of_birth": "2002-12-15"
+    },
+    {
+      "name": "Colston Loveland",
+      "position": "TE",
+      "team": "FA",
+      "draft_position": 127,
+      "projected_stats": {
+        "games": 16,
+        "targets": 28,
+        "receptions": 22,
+        "rec_yards": 283,
+        "rec_td": 1,
+        "rush_attempts": 1,
+        "rush_yards": 6,
+        "rush_td": 0
+      },
+      "height": 77,
+      "weight": 248,
+      "date_of_birth": "2004-04-09"
+    },
+    {
+      "name": "Tre Harris",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 131,
+      "projected_stats": {
+        "games": 16,
+        "targets": 49,
+        "receptions": 35,
+        "rec_yards": 600,
+        "rec_td": 4,
+        "rush_attempts": 2,
+        "rush_yards": 19,
+        "rush_td": 0
+      },
+      "height": 74,
+      "weight": 205,
+      "date_of_birth": "2002-02-28"
+    },
+    {
+      "name": "Bhayshul Tuten",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 137,
+      "projected_stats": {
+        "games": 13,
+        "carries": 83,
+        "rush_yards": 395,
+        "rush_td": 3,
+        "targets": 18,
+        "receptions": 11,
+        "rec_yards": 128,
+        "rec_td": 0
+      },
+      "height": 69,
+      "weight": 206,
+      "date_of_birth": "2003-02-14"
+    },
+    {
+      "name": "Devin Neal",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 146,
+      "projected_stats": {
+        "games": 13,
+        "carries": 77,
+        "rush_yards": 367,
+        "rush_td": 3,
+        "targets": 17,
+        "receptions": 10,
+        "rec_yards": 118,
+        "rec_td": 0
+      },
+      "height": 71,
+      "weight": 213,
+      "date_of_birth": "2003-08-12"
+    },
+    {
+      "name": "Dylan Sampson",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 152,
+      "projected_stats": {
+        "games": 16,
+        "carries": 74,
+        "rush_yards": 350,
+        "rush_td": 2,
+        "targets": 16,
+        "receptions": 10,
+        "rec_yards": 113,
+        "rec_td": 0
+      },
+      "height": 68,
+      "weight": 200,
+      "date_of_birth": "2004-09-14"
+    },
+    {
+      "name": "Cam Ward",
+      "position": "QB",
+      "team": "FA",
+      "draft_position": 158,
+      "projected_stats": {
+        "games": 16,
+        "pass_attempts": 371,
+        "completions": 234,
+        "pass_yards": 2378,
+        "pass_td": 13,
+        "interceptions": 8,
+        "rush_attempts": 29,
+        "rush_yards": 163,
+        "rush_td": 1
+      },
+      "height": 73,
+      "weight": 219,
+      "date_of_birth": "2002-05-25"
+    },
+    {
+      "name": "DJ Giddens",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 169,
+      "projected_stats": {
+        "games": 13,
+        "carries": 64,
+        "rush_yards": 305,
+        "rush_td": 2,
+        "targets": 14,
+        "receptions": 8,
+        "rec_yards": 98,
+        "rec_td": 0
+      },
+      "height": 72,
+      "weight": 212,
+      "date_of_birth": "2003-08-26"
+    },
+    {
+      "name": "RJ Harvey",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 170,
+      "projected_stats": {
+        "games": 13,
+        "carries": 64,
+        "rush_yards": 305,
+        "rush_td": 2,
+        "targets": 14,
+        "receptions": 8,
+        "rec_yards": 98,
+        "rec_td": 0
+      },
+      "height": 68,
+      "weight": 205,
+      "date_of_birth": "2001-02-04"
+    },
+    {
+      "name": "Jaylin Noel",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 181,
+      "projected_stats": {
+        "games": 16,
+        "targets": 34,
+        "receptions": 24,
+        "rec_yards": 421,
+        "rec_td": 3,
+        "rush_attempts": 1,
+        "rush_yards": 13,
+        "rush_td": 0
+      },
+      "height": 70,
+      "weight": 194,
+      "date_of_birth": "2002-09-04"
+    },
+    {
+      "name": "Elic Ayomanor",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 178,
+      "projected_stats": {
+        "games": 10,
+        "targets": 35,
+        "receptions": 25,
+        "rec_yards": 430,
+        "rec_td": 3,
+        "rush_attempts": 1,
+        "rush_yards": 13,
+        "rush_td": 0
+      },
+      "height": 73,
+      "weight": 206,
+      "date_of_birth": "2003-06-15"
+    },
+    {
+      "name": "Damien Martinez",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 190,
+      "projected_stats": {
+        "games": 10,
+        "carries": 54,
+        "rush_yards": 259,
+        "rush_td": 2,
+        "targets": 12,
+        "receptions": 7,
+        "rec_yards": 83,
+        "rec_td": 0
+      },
+      "height": 71,
+      "weight": 217,
+      "date_of_birth": "2004-01-31"
+    },
+    {
+      "name": "Isaiah Bond",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 181,
+      "projected_stats": {
+        "games": 10,
+        "targets": 34,
+        "receptions": 24,
+        "rec_yards": 422,
+        "rec_td": 3,
+        "rush_attempts": 1,
+        "rush_yards": 13,
+        "rush_td": 0
+      },
+      "height": 70,
+      "weight": 180,
+      "date_of_birth": "2004-03-15"
+    },
+    {
+      "name": "Jack Bech",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 203,
+      "projected_stats": {
+        "games": 13,
+        "targets": 29,
+        "receptions": 21,
+        "rec_yards": 360,
+        "rec_td": 2,
+        "rush_attempts": 1,
+        "rush_yards": 11,
+        "rush_td": 0
+      },
+      "height": 73,
+      "weight": 214,
+      "date_of_birth": "2002-12-18"
+    },
+    {
+      "name": "Shedeur Sanders",
+      "position": "QB",
+      "team": "FA",
+      "draft_position": 195,
+      "projected_stats": {
+        "games": 10,
+        "pass_attempts": 319,
+        "completions": 201,
+        "pass_yards": 2047,
+        "pass_td": 11,
+        "interceptions": 7,
+        "rush_attempts": 25,
+        "rush_yards": 140,
+        "rush_td": 1
+      },
+      "height": 73,
+      "weight": 212,
+      "date_of_birth": "2002-02-07"
+    },
+    {
+      "name": "Brashard Smith",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 208,
+      "projected_stats": {
+        "games": 13,
+        "carries": 47,
+        "rush_yards": 225,
+        "rush_td": 1,
+        "targets": 10,
+        "receptions": 6,
+        "rec_yards": 72,
+        "rec_td": 0
+      },
+      "height": 69,
+      "weight": 194,
+      "date_of_birth": "2003-04-11"
+    },
+    {
+      "name": "Jalen Royals",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 193,
+      "projected_stats": {
+        "games": 16,
+        "targets": 31,
+        "receptions": 22,
+        "rec_yards": 387,
+        "rec_td": 3,
+        "rush_attempts": 1,
+        "rush_yards": 12,
+        "rush_td": 0
+      },
+      "height": 72,
+      "weight": 205,
+      "date_of_birth": "2003-02-18"
+    },
+    {
+      "name": "Ollie Gordon II",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 186,
+      "projected_stats": {
+        "games": 13,
+        "carries": 56,
+        "rush_yards": 267,
+        "rush_td": 2,
+        "targets": 12,
+        "receptions": 7,
+        "rec_yards": 86,
+        "rec_td": 0
+      },
+      "height": 73,
+      "weight": 226,
+      "date_of_birth": "2004-01-15"
+    },
+    {
+      "name": "Kyle Williams",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 227,
+      "projected_stats": {
+        "games": 13,
+        "targets": 24,
+        "receptions": 17,
+        "rec_yards": 302,
+        "rec_td": 2,
+        "rush_attempts": 1,
+        "rush_yards": 9,
+        "rush_td": 0
+      },
+      "height": 70,
+      "weight": 190,
+      "date_of_birth": "2002-11-13"
+    },
+    {
+      "name": "Tory Horton",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 236,
+      "projected_stats": {
+        "games": 10,
+        "targets": 23,
+        "receptions": 16,
+        "rec_yards": 285,
+        "rec_td": 2,
+        "rush_attempts": 1,
+        "rush_yards": 9,
+        "rush_td": 0
+      },
+      "height": 74,
+      "weight": 196,
+      "date_of_birth": "2002-11-29"
+    },
+    {
+      "name": "Tai Felton",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 237,
+      "projected_stats": {
+        "games": 13,
+        "targets": 23,
+        "receptions": 16,
+        "rec_yards": 282,
+        "rec_td": 2,
+        "rush_attempts": 1,
+        "rush_yards": 8,
+        "rush_td": 0
+      },
+      "height": 73,
+      "weight": 183,
+      "date_of_birth": "2003-03-15"
+    },
+    {
+      "name": "Elijah Arroyo",
+      "position": "TE",
+      "team": "FA",
+      "draft_position": 234,
+      "projected_stats": {
+        "games": 16,
+        "targets": 14,
+        "receptions": 11,
+        "rec_yards": 145,
+        "rec_td": 0,
+        "rush_attempts": 0,
+        "rush_yards": 3,
+        "rush_td": 0
+      },
+      "height": 77,
+      "weight": 250,
+      "date_of_birth": "2003-04-05"
+    },
+    {
+      "name": "Mason Taylor",
+      "position": "TE",
+      "team": "FA",
+      "draft_position": 236,
+      "projected_stats": {
+        "games": 10,
+        "targets": 14,
+        "receptions": 11,
+        "rec_yards": 143,
+        "rec_td": 0,
+        "rush_attempts": 0,
+        "rush_yards": 3,
+        "rush_td": 0
+      },
+      "height": 77,
+      "weight": 251,
+      "date_of_birth": "2004-05-08"
+    },
+    {
+      "name": "Harold Fannin Jr.",
+      "position": "TE",
+      "team": "FA",
+      "draft_position": 216,
+      "projected_stats": {
+        "games": 10,
+        "targets": 16,
+        "receptions": 12,
+        "rec_yards": 163,
+        "rec_td": 1,
+        "rush_attempts": 0,
+        "rush_yards": 3,
+        "rush_td": 0
+      },
+      "height": 75,
+      "weight": 241,
+      "date_of_birth": "2003-07-20"
+    },
+    {
+      "name": "Jaxson Dart",
+      "position": "QB",
+      "team": "FA",
+      "draft_position": 220,
+      "projected_stats": {
+        "games": 10,
+        "pass_attempts": 290,
+        "completions": 182,
+        "pass_yards": 1856,
+        "pass_td": 10,
+        "interceptions": 6,
+        "rush_attempts": 23,
+        "rush_yards": 127,
+        "rush_td": 1
+      },
+      "height": 74,
+      "weight": 223,
+      "date_of_birth": "2003-05-13"
+    },
+    {
+      "name": "Savion Williams",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 233,
+      "projected_stats": {
+        "games": 10,
+        "targets": 23,
+        "receptions": 17,
+        "rec_yards": 290,
+        "rec_td": 2,
+        "rush_attempts": 1,
+        "rush_yards": 9,
+        "rush_td": 0
+      },
+      "height": 75,
+      "weight": 222,
+      "date_of_birth": "2001-11-22"
+    },
+    {
+      "name": "Trevor Etienne",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 236,
+      "projected_stats": {
+        "games": 10,
+        "carries": 38,
+        "rush_yards": 179,
+        "rush_td": 1,
+        "targets": 8,
+        "receptions": 5,
+        "rec_yards": 58,
+        "rec_td": 0
+      },
+      "height": 68,
+      "weight": 198,
+      "date_of_birth": "2004-07-09"
+    },
+    {
+      "name": "Jordan James",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 236,
+      "projected_stats": {
+        "games": 13,
+        "carries": 38,
+        "rush_yards": 179,
+        "rush_td": 1,
+        "targets": 8,
+        "receptions": 5,
+        "rec_yards": 58,
+        "rec_td": 0
+      },
+      "height": 69,
+      "weight": 205,
+      "date_of_birth": "2004-03-29"
+    },
+    {
+      "name": "Jaydon Blue",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 237,
+      "projected_stats": {
+        "games": 13,
+        "carries": 37,
+        "rush_yards": 177,
+        "rush_td": 1,
+        "targets": 8,
+        "receptions": 5,
+        "rec_yards": 57,
+        "rec_td": 0
+      },
+      "height": 69,
+      "weight": 196,
+      "date_of_birth": "2004-01-08"
+    },
+    {
+      "name": "Marcus Yarns",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 239,
+      "projected_stats": {
+        "games": 13,
+        "carries": 37,
+        "rush_yards": 174,
+        "rush_td": 1,
+        "targets": 8,
+        "receptions": 5,
+        "rec_yards": 56,
+        "rec_td": 0
+      },
+      "height": 70,
+      "weight": 193,
+      "date_of_birth": "2001-10-30"
+    },
+    {
+      "name": "Elijhah Badger",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 239,
+      "projected_stats": {
+        "games": 16,
+        "targets": 22,
+        "receptions": 16,
+        "rec_yards": 277,
+        "rec_td": 2,
+        "rush_attempts": 1,
+        "rush_yards": 8,
+        "rush_td": 0
+      },
+      "height": 73,
+      "weight": 200,
+      "date_of_birth": "2001-08-16"
+    },
+    {
+      "name": "LeQuint Allen Jr.",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 238,
+      "projected_stats": {
+        "games": 13,
+        "carries": 37,
+        "rush_yards": 176,
+        "rush_td": 1,
+        "targets": 8,
+        "receptions": 5,
+        "rec_yards": 57,
+        "rec_td": 0
+      },
+      "height": 72,
+      "weight": 204,
+      "date_of_birth": "2004-08-05"
+    },
+    {
+      "name": "Tahj Brooks",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 238,
+      "projected_stats": {
+        "games": 10,
+        "carries": 37,
+        "rush_yards": 176,
+        "rush_td": 1,
+        "targets": 8,
+        "receptions": 5,
+        "rec_yards": 57,
+        "rec_td": 0
+      },
+      "height": 69,
+      "weight": 214,
+      "date_of_birth": "2002-05-13"
+    },
+    {
+      "name": "Xavier Restrepo",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 199,
+      "projected_stats": {
+        "games": 13,
+        "targets": 30,
+        "receptions": 21,
+        "rec_yards": 371,
+        "rec_td": 3,
+        "rush_attempts": 1,
+        "rush_yards": 11,
+        "rush_td": 0
+      },
+      "height": 69,
+      "weight": 209,
+      "date_of_birth": "2002-04-22"
+    },
+    {
+      "name": "Raheim Sanders",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 235,
+      "projected_stats": {
+        "games": 13,
+        "carries": 38,
+        "rush_yards": 181,
+        "rush_td": 1,
+        "targets": 8,
+        "receptions": 5,
+        "rec_yards": 58,
+        "rec_td": 0
+      },
+      "height": 72,
+      "weight": 217,
+      "date_of_birth": "2003-06-08"
+    },
+    {
+      "name": "Kalel Mullings",
+      "position": "RB",
+      "team": "FA",
+      "draft_position": 239,
+      "projected_stats": {
+        "games": 13,
+        "carries": 36,
+        "rush_yards": 174,
+        "rush_td": 1,
+        "targets": 8,
+        "receptions": 5,
+        "rec_yards": 56,
+        "rec_td": 0
+      },
+      "height": 73,
+      "weight": 226,
+      "date_of_birth": "2002-10-04"
+    },
+    {
+      "name": "Ricky White",
+      "position": "WR",
+      "team": "FA",
+      "draft_position": 240,
+      "projected_stats": {
+        "games": 13,
+        "targets": 22,
+        "receptions": 16,
+        "rec_yards": 277,
+        "rec_td": 2,
+        "rush_attempts": 1,
+        "rush_yards": 8,
+        "rush_td": 0
+      },
+      "height": 73,
+      "weight": 184,
+      "date_of_birth": "2002-02-06"
+    },
+    {
+      "name": "Oronde Gadsden II",
+      "position": "TE",
+      "team": "FA",
+      "draft_position": 239,
+      "projected_stats": {
+        "games": 13,
+        "targets": 14,
+        "receptions": 10,
+        "rec_yards": 140,
+        "rec_td": 0,
+        "rush_attempts": 0,
+        "rush_yards": 3,
+        "rush_td": 0
+      },
+      "height": 76,
+      "weight": 243,
+      "date_of_birth": "2003-06-25"
+    }
+  ]
+}

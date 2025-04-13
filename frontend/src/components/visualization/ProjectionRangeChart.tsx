@@ -42,17 +42,24 @@ const ProjectionRangeChart: React.FC<ProjectionRangeChartProps> = ({
   showAverage = true
 }) => {
   // Calculate average if needed
-  const average = showAverage ? 
-    data.reduce((sum, item) => sum + item.value, 0) / (data.length || 1) : null;
+  const average = showAverage && data.length > 0 ? 
+    data.reduce((sum, item) => sum + (item.value || 0), 0) / (data.length || 1) : null;
 
   // Format data for recharts with error bars
-  const formattedData = data.map(item => ({
-    name: item.name,
-    position: item.position,
-    team: item.team,
-    value: item.value,
-    errorY: [item.value - item.range.low, item.range.high - item.value]
-  }));
+  const formattedData = data.map(item => {
+    // Ensure values are defined and numerical
+    const value = item.value !== null && item.value !== undefined ? item.value : 0;
+    const lowRange = item.range?.low !== null && item.range?.low !== undefined ? item.range.low : 0;
+    const highRange = item.range?.high !== null && item.range?.high !== undefined ? item.range.high : 0;
+    
+    return {
+      name: item.name,
+      position: item.position,
+      team: item.team,
+      value: value,
+      errorY: [value - lowRange, highRange - value]
+    };
+  });
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -93,7 +100,7 @@ const ProjectionRangeChart: React.FC<ProjectionRangeChartProps> = ({
             if (active && payload && payload.length) {
               const data = payload[0].payload;
               const [lowError, highError] = data.errorY || [0, 0];
-              const projValue = data.value;
+              const projValue = data.value !== null && data.value !== undefined ? data.value : 0;
               
               return (
                 <div className="bg-background p-3 border shadow-sm rounded-md">

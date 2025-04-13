@@ -1,10 +1,27 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
     <title>Fantasy Football Projections</title>
+    <!-- Prevent theme flash during page load -->
+    <script>
+      (function() {
+        // Force dark mode by default, only use light if explicitly set
+        const theme = localStorage.getItem('theme');
+        
+        if (theme === 'light') {
+          // Only remove dark if explicitly set to light
+          document.documentElement.classList.remove('dark');
+        } else {
+          // Set dark mode explicitly and store preference
+          document.documentElement.classList.add('dark');
+          localStorage.setItem('theme', 'dark');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

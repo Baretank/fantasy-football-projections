@@ -24,7 +24,6 @@ from backend.api.schemas import (
 )
 
 router = APIRouter(
-    prefix="/projections",
     tags=["projections"]
 )
 

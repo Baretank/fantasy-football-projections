@@ -16,7 +16,6 @@ from backend.api.schemas import (
 )
 
 router = APIRouter(
-    prefix="/batch",
     tags=["batch operations"]
 )
 

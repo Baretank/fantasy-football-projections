@@ -35,7 +35,7 @@ class TestPlayerRoutes:
     
     def test_get_players(self, client, sample_players):
         """Test getting all players with pagination."""
-        response = client.get("/api/players/players/")
+        response = client.get("/api/players/")
         
         assert response.status_code == 200
         data = response.json()
@@ -54,7 +54,7 @@ class TestPlayerRoutes:
         """Test getting a player by ID."""
         player_id = sample_players["ids"]["Patrick Mahomes"]
         
-        response = client.get(f"/api/players/players/{player_id}")
+        response = client.get(f"/api/players/{player_id}")
         
         assert response.status_code == 200
         data = response.json()
@@ -66,14 +66,14 @@ class TestPlayerRoutes:
     def test_player_search(self, client, sample_players):
         """Test player search functionality."""
         # Search by name
-        response = client.get("/api/players/players/search?query=Maho")
+        response = client.get("/api/players/search?query=Maho")
         assert response.status_code == 200
         data = response.json()
         assert data["count"] > 0
         assert "Patrick Mahomes" in [p["name"] for p in data["players"]]
         
         # Search with position filter
-        response = client.get("/api/players/players/search?query=Ma&position=QB")
+        response = client.get("/api/players/search?query=Ma&position=QB")
         assert response.status_code == 200
         data = response.json()
         assert data["count"] > 0
@@ -85,7 +85,7 @@ class TestPlayerRoutes:
         player_id = sample_players["ids"]["Patrick Mahomes"]
         
         # Update status to Injured
-        response = client.put(f"/api/players/players/{player_id}/status?status=Injured")
+        response = client.put(f"/api/players/{player_id}/status?status=Injured")
         
         assert response.status_code == 200
         data = response.json()
@@ -121,7 +121,7 @@ class TestProjectionRoutes:
         test_db.commit()
         
         # Get the projection
-        response = client.get(f"/api/projections/projections/{projection.projection_id}")
+        response = client.get(f"/api/projections/{projection.projection_id}")
         
         assert response.status_code == 200
         data = response.json()
@@ -164,14 +164,14 @@ class TestProjectionRoutes:
         
         # Test filtering by position (using team to filter)
         qb_player = next(p for p in sample_players["players"] if p.position == "QB")
-        response = client.get(f"/api/projections/projections/?team={qb_player.team}")
+        response = client.get(f"/api/projections/?team={qb_player.team}")
         
         assert response.status_code == 200
         data = response.json()
         assert len(data) > 0
         
         # Test filtering by player_id
-        response = client.get(f"/api/projections/projections/?player_id={qb_player.player_id}")
+        response = client.get(f"/api/projections/?player_id={qb_player.player_id}")
         
         assert response.status_code == 200
         data = response.json()
@@ -191,7 +191,7 @@ class TestScenarioRoutes:
         }
         
         # Create
-        response = client.post("/api/scenarios/scenarios/", json=scenario_data)
+        response = client.post("/api/scenarios/", json=scenario_data)
         
         assert response.status_code == 201
         data = response.json()
@@ -199,7 +199,7 @@ class TestScenarioRoutes:
         assert data["name"] == "Test Scenario"
         
         # Get scenario by ID
-        response = client.get(f"/api/scenarios/scenarios/{scenario_id}")
+        response = client.get(f"/api/scenarios/{scenario_id}")
         
         assert response.status_code == 200
         data = response.json()
@@ -207,7 +207,7 @@ class TestScenarioRoutes:
         assert data["name"] == "Test Scenario"
         
         # Get all scenarios
-        response = client.get("/api/scenarios/scenarios/")
+        response = client.get("/api/scenarios/")
         
         assert response.status_code == 200
         data = response.json()
@@ -229,7 +229,7 @@ class TestScenarioRoutes:
         test_db.commit()
         
         # Delete the scenario
-        response = client.delete(f"/api/scenarios/scenarios/{scenario.scenario_id}")
+        response = client.delete(f"/api/scenarios/{scenario.scenario_id}")
         
         assert response.status_code == 200
         data = response.json()
@@ -273,7 +273,7 @@ class TestOverrideRoutes:
             "notes": "Testing override"
         }
         
-        response = client.post("/api/overrides/overrides/", json=override_data)
+        response = client.post("/api/overrides/", json=override_data)
         
         assert response.status_code == 201
         data = response.json()
@@ -283,7 +283,7 @@ class TestOverrideRoutes:
         assert data["manual_value"] == 45.0
         
         # Get overrides for player
-        response = client.get(f"/api/overrides/overrides/player/{player_id}")
+        response = client.get(f"/api/overrides/player/{player_id}")
         
         assert response.status_code == 200
         data = response.json()
@@ -291,14 +291,14 @@ class TestOverrideRoutes:
         assert any(o["override_id"] == override_id for o in data)
         
         # Delete the override
-        response = client.delete(f"/api/overrides/overrides/{override_id}")
+        response = client.delete(f"/api/overrides/{override_id}")
         
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
         
         # Verify it's gone
-        overrides = client.get(f"/api/overrides/overrides/player/{player_id}").json()
+        overrides = client.get(f"/api/overrides/player/{player_id}").json()
         assert not any(o["override_id"] == override_id for o in overrides)
 
 # For now, only include API route verification without complex batch operations
@@ -308,9 +308,9 @@ class TestBatchEndpoints:
     def test_batch_endpoints_exist(self, client):
         """Verify that batch endpoints exist and respond"""
         # Just test that the endpoint exists
-        response = client.options("/api/batch/batch/projections/create")
+        response = client.options("/api/batch/projections/create")
         assert response.status_code in [200, 204, 405], f"Status code: {response.status_code}"
         
         # Check cache endpoints
-        response = client.get("/api/batch/batch/cache/stats")
+        response = client.get("/api/batch/cache/stats")
         assert response.status_code in [200, 403, 500], f"Status code: {response.status_code}"

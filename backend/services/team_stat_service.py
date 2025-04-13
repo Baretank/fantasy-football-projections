@@ -35,24 +35,23 @@ class TeamStatService:
             Tuple of (success_count, error_messages)
         """
         try:
-            # In a real implementation, this would fetch from an external source
-            # For tests, we use the mock provider set up in conftest.py
-            if not hasattr(self, 'stats_provider') or self.stats_provider is None:
-                # Use the mock provider function from conftest for testing
-                from tests.conftest import get_mock_team_stats
-                self.stats_provider = get_mock_team_stats
-            
-            # Get team stats data
-            df = self.stats_provider(season)
+            # Use real data from the NFL data adapter
+            from backend.services.adapters.nfl_data_py_adapter import NFLDataPyAdapter
             
             # Track stats
             success_count = 0
             error_messages = []
             
+            # Create adapter and fetch real team stats
+            adapter = NFLDataPyAdapter()
+            df = await adapter.get_team_stats(season)
+            
+            logger.info(f"Retrieved team stats for season {season} with {len(df)} teams")
+            
             # Process each team's stats
             for _, row in df.iterrows():
                 try:
-                    team = row['Tm']
+                    team = row['team']
                     
                     # Create or update team stats
                     team_stat = self.db.query(TeamStat).filter(
@@ -67,27 +66,27 @@ class TeamStatService:
                         )
                         self.db.add(team_stat)
                     
-                    # Set fields from dataframe
-                    team_stat.plays = int(row['Plays'])
-                    team_stat.pass_percentage = float(row['Pass%'])
-                    team_stat.pass_attempts = int(row['PassAtt'])
-                    team_stat.pass_yards = int(row['PassYds'])
-                    team_stat.pass_td = int(row['PassTD'])
-                    team_stat.pass_td_rate = float(row['TD%'])
-                    team_stat.rush_attempts = int(row['RushAtt'])
-                    team_stat.rush_yards = int(row['RushYds'])
-                    team_stat.rush_td = int(row['RushTD'])
-                    team_stat.rush_yards_per_carry = float(row['Y/A'])
-                    team_stat.targets = int(row['Tgt'])
-                    team_stat.receptions = int(row['Rec'])
-                    team_stat.rec_yards = int(row['RecYds'])
-                    team_stat.rec_td = int(row['RecTD'])
-                    team_stat.rank = int(row['Rank'])
+                    # Set fields from dataframe - using the field names from the adapter
+                    team_stat.plays = int(row['plays'])
+                    team_stat.pass_percentage = float(row['pass_percentage'])
+                    team_stat.pass_attempts = int(row['pass_attempts'])
+                    team_stat.pass_yards = int(row['pass_yards'])
+                    team_stat.pass_td = int(row['pass_td'])
+                    team_stat.pass_td_rate = float(row['pass_td_rate'])
+                    team_stat.rush_attempts = int(row['rush_attempts'])
+                    team_stat.rush_yards = int(row['rush_yards'])
+                    team_stat.rush_td = int(row['rush_td'])
+                    team_stat.rush_yards_per_carry = float(row['rush_yards_per_carry'])
+                    team_stat.targets = int(row['targets'])
+                    team_stat.receptions = int(row['receptions'])
+                    team_stat.rec_yards = int(row['rec_yards'])
+                    team_stat.rec_td = int(row['rec_td'])
+                    team_stat.rank = int(row['rank'])
                     
                     success_count += 1
                     
                 except Exception as e:
-                    error_msg = f"Error processing team {row.get('Tm', 'unknown')}: {str(e)}"
+                    error_msg = f"Error processing team {row.get('team', 'unknown')}: {str(e)}"
                     error_messages.append(error_msg)
                     logger.error(error_msg)
             

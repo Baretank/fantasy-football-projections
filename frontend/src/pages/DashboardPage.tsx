@@ -6,6 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useToast } from '@/components/ui/use-toast';
 import { 
   BarChart, 
   Bar, 
@@ -34,6 +35,7 @@ import {
   ExclamationCircleIcon,
   ChartPieIcon
 } from '@heroicons/react/24/outline';
+// ArrowsRightLeftIcon is not needed anymore, since we've replaced it with ArrowRightIcon
 import { 
   PlayerService, 
   ProjectionService, 
@@ -42,6 +44,7 @@ import {
 import { Player, Projection, Scenario } from '@/types/index';
 
 const DashboardPage: React.FC = () => {
+  const { toast } = useToast();
   // State
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [topProjections, setTopProjections] = useState<Record<string, any[]>>({});
@@ -53,6 +56,7 @@ const DashboardPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [projectionRangeData, setProjectionRangeData] = useState<any[]>([]);
+  const [isRunningProjections, setIsRunningProjections] = useState<boolean>(false);
   
   // Color configurations
   const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088FE', '#00C49F'];
@@ -72,10 +76,12 @@ const DashboardPage: React.FC = () => {
         
         // Fetch all scenarios
         const scenariosData = await ScenarioService.getScenarios();
+        console.log("All scenarios:", scenariosData);
         setScenarios(scenariosData);
         
         // Find baseline scenario
         const baseline = scenariosData.find(s => s.is_baseline) || scenariosData[0];
+        console.log("Selected baseline scenario:", baseline);
         setBaselineScenario(baseline);
         
         // Fetch player overview data
@@ -83,21 +89,31 @@ const DashboardPage: React.FC = () => {
         
         // Create player map for quick lookups
         const playerMap: Record<string, Player> = {};
-        playersData.forEach((player: Player) => {
-          playerMap[player.player_id] = player;
-        });
+        if (Array.isArray(playersData)) {
+          playersData.forEach((player: Player) => {
+            if (player && player.player_id) {
+              playerMap[player.player_id] = player;
+            }
+          });
+          setPlayerCount(playersData.length);
+        } else {
+          setPlayerCount(0);
+        }
         setPlayers(playerMap);
-        setPlayerCount(playersData.length);
         
         // Calculate position distribution
         const positionCounts: Record<string, number> = {};
-        playersData.forEach((player: Player) => {
-          positionCounts[player.position] = (positionCounts[player.position] || 0) + 1;
-        });
+        if (Array.isArray(playersData)) {
+          playersData.forEach((player: Player) => {
+            if (player && player.position) {
+              positionCounts[player.position] = (positionCounts[player.position] || 0) + 1;
+            }
+          });
+        }
         
         setPositionData(
           Object.entries(positionCounts).map(([position, count], index) => ({
-            name: position,
+            name: position || 'Unknown',
             value: count,
             color: POSITION_COLORS[position] || COLORS[index % COLORS.length]
           }))
@@ -105,9 +121,13 @@ const DashboardPage: React.FC = () => {
         
         // Calculate team distribution
         const teamCounts: Record<string, number> = {};
-        playersData.forEach((player: Player) => {
-          teamCounts[player.team] = (teamCounts[player.team] || 0) + 1;
-        });
+        if (Array.isArray(playersData)) {
+          playersData.forEach((player: Player) => {
+            if (player && player.team) {
+              teamCounts[player.team] = (teamCounts[player.team] || 0) + 1;
+            }
+          });
+        }
         
         // Sort teams by player count
         setTeamData(
@@ -115,7 +135,7 @@ const DashboardPage: React.FC = () => {
             .sort((a, b) => b[1] - a[1])
             .slice(0, 10)
             .map(([team, count], index) => ({
-              name: team,
+              name: team || 'Unknown',
               players: count
             }))
         );
@@ -138,19 +158,31 @@ const DashboardPage: React.FC = () => {
           for (const [position, promise] of Object.entries(positionPromises)) {
             try {
               const projections = await promise;
+              console.log(`Received ${position} projections:`, projections);
+              
+              // Check that projections is an array and has content
+              if (!Array.isArray(projections) || projections.length === 0) {
+                console.log(`No ${position} projections found.`);
+                positionResults[position] = [];
+                continue;
+              }
               
               // Sort by half PPR points
               const sorted = projections
-                .sort((a, b) => b.half_ppr - a.half_ppr)
+                .filter(p => p && typeof p === 'object' && p.half_ppr !== undefined && p.half_ppr !== null)
+                .sort((a, b) => (b.half_ppr || 0) - (a.half_ppr || 0))
                 .slice(0, 10);
-                
+              
+              console.log(`Sorted ${position} projections:`, sorted);
               positionResults[position] = sorted;
               
               // For top players, fetch projection ranges
-              if (position === 'QB' || position === 'RB') {
+              if ((position === 'QB' || position === 'RB') && Array.isArray(sorted) && sorted.length > 0) {
                 const topPlayers = sorted.slice(0, 5);
                 
                 for (const projection of topPlayers) {
+                  if (!projection || !projection.projection_id) continue;
+                  
                   try {
                     const range = await ProjectionService.getProjectionRange(
                       projection.projection_id,
@@ -158,17 +190,19 @@ const DashboardPage: React.FC = () => {
                     );
                     
                     // Add to ranges data
-                    if (range && playerMap[projection.player_id]) {
+                    if (range && projection.player_id && playerMap[projection.player_id]) {
+                      const halfPpr = projection.half_ppr || 0;
+                      
                       setProjectionRangeData(prev => [
-                        ...prev,
+                        ...(Array.isArray(prev) ? prev : []),
                         {
                           name: playerMap[projection.player_id]?.name || 'Unknown',
                           position,
                           team: playerMap[projection.player_id]?.team || 'UNK',
-                          value: projection.half_ppr,
+                          value: halfPpr,
                           range: {
-                            low: range.low.half_ppr || projection.half_ppr * 0.8,
-                            high: range.high.half_ppr || projection.half_ppr * 1.2
+                            low: range.low?.half_ppr || halfPpr * 0.8,
+                            high: range.high?.half_ppr || halfPpr * 1.2
                           }
                         }
                       ]);
@@ -184,7 +218,15 @@ const DashboardPage: React.FC = () => {
             }
           }
           
+          console.log("Final position results before setting state:", positionResults);
           setTopProjections(positionResults);
+          
+          // Diagnostic for empty position results
+          for (const [position, projections] of Object.entries(positionResults)) {
+            if (!projections || projections.length === 0) {
+              console.warn(`No projections found for position: ${position}`);
+            }
+          }
         }
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
@@ -199,6 +241,14 @@ const DashboardPage: React.FC = () => {
   
   // Helper to get player info
   const getPlayerInfo = (playerId: string) => {
+    if (!playerId || typeof playerId !== 'string') {
+      return {
+        name: 'Unknown Player',
+        team: 'UNK',
+        position: '?'
+      };
+    }
+    
     const player = players[playerId];
     return {
       name: player?.name || 'Unknown Player',
@@ -220,13 +270,19 @@ const DashboardPage: React.FC = () => {
     ];
     
     // Count projections in each range
-    Object.values(topProjections).forEach(projections => {
-      projections.forEach(proj => {
-        const points = proj.half_ppr;
-        const range = pointRanges.find(r => points >= r.min && points < r.max);
-        if (range) range.count++;
+    if (topProjections && typeof topProjections === 'object') {
+      Object.values(topProjections).forEach(projections => {
+        if (Array.isArray(projections)) {
+          projections.forEach(proj => {
+            if (proj && typeof proj === 'object') {
+              const points = proj.half_ppr || 0;
+              const range = pointRanges.find(r => points >= r.min && points < r.max);
+              if (range) range.count++;
+            }
+          });
+        }
       });
-    });
+    }
     
     return pointRanges;
   };
@@ -235,7 +291,7 @@ const DashboardPage: React.FC = () => {
   const getSummaryStats = () => {
     const stats = {
       totalPlayers: playerCount,
-      totalScenarios: scenarios.length,
+      totalScenarios: Array.isArray(scenarios) ? scenarios.length : 0,
       topQB: { name: 'N/A', value: 0, playerId: '' },
       topRB: { name: 'N/A', value: 0, playerId: '' },
       topWR: { name: 'N/A', value: 0, playerId: '' },
@@ -243,47 +299,161 @@ const DashboardPage: React.FC = () => {
     };
     
     // Find top players by position
-    if (topProjections.QB && topProjections.QB.length > 0) {
+    if (topProjections?.QB && Array.isArray(topProjections.QB) && topProjections.QB.length > 0) {
       const topQB = topProjections.QB[0];
-      const { name } = getPlayerInfo(topQB.player_id);
-      stats.topQB = { 
-        name, 
-        value: topQB.half_ppr, 
-        playerId: topQB.player_id 
-      };
+      if (topQB && topQB.player_id) {
+        const { name } = getPlayerInfo(topQB.player_id);
+        stats.topQB = { 
+          name, 
+          value: topQB.half_ppr || 0, 
+          playerId: topQB.player_id 
+        };
+      }
     }
     
-    if (topProjections.RB && topProjections.RB.length > 0) {
+    if (topProjections?.RB && Array.isArray(topProjections.RB) && topProjections.RB.length > 0) {
       const topRB = topProjections.RB[0];
-      const { name } = getPlayerInfo(topRB.player_id);
-      stats.topRB = { 
-        name, 
-        value: topRB.half_ppr, 
-        playerId: topRB.player_id 
-      };
+      if (topRB && topRB.player_id) {
+        const { name } = getPlayerInfo(topRB.player_id);
+        stats.topRB = { 
+          name, 
+          value: topRB.half_ppr || 0, 
+          playerId: topRB.player_id 
+        };
+      }
     }
     
-    if (topProjections.WR && topProjections.WR.length > 0) {
+    if (topProjections?.WR && Array.isArray(topProjections.WR) && topProjections.WR.length > 0) {
       const topWR = topProjections.WR[0];
-      const { name } = getPlayerInfo(topWR.player_id);
-      stats.topWR = { 
-        name, 
-        value: topWR.half_ppr, 
-        playerId: topWR.player_id 
-      };
+      if (topWR && topWR.player_id) {
+        const { name } = getPlayerInfo(topWR.player_id);
+        stats.topWR = { 
+          name, 
+          value: topWR.half_ppr || 0, 
+          playerId: topWR.player_id 
+        };
+      }
     }
     
-    if (topProjections.TE && topProjections.TE.length > 0) {
+    if (topProjections?.TE && Array.isArray(topProjections.TE) && topProjections.TE.length > 0) {
       const topTE = topProjections.TE[0];
-      const { name } = getPlayerInfo(topTE.player_id);
-      stats.topTE = { 
-        name, 
-        value: topTE.half_ppr, 
-        playerId: topTE.player_id 
-      };
+      if (topTE && topTE.player_id) {
+        const { name } = getPlayerInfo(topTE.player_id);
+        stats.topTE = { 
+          name, 
+          value: topTE.half_ppr || 0, 
+          playerId: topTE.player_id 
+        };
+      }
     }
     
     return stats;
+  };
+  
+  // Function to run projections for all players
+  const runBaselineProjections = async () => {
+    if (!baselineScenario) return;
+    
+    try {
+      setIsRunningProjections(true);
+      setError(null);
+      
+      console.log("Starting to generate baseline projections");
+      
+      // Get all players first
+      const playersData = await PlayerService.getPlayersOverview();
+      if (!Array.isArray(playersData) || playersData.length === 0) {
+        throw new Error("No players found to generate projections");
+      }
+      
+      console.log(`Found ${playersData.length} players for projection generation`);
+      
+      // Create projections for each player
+      let successCount = 0;
+      let errorCount = 0;
+      // Use 2023 as season year since that's what the API expects (>= 2023 according to API schema)
+      const seasonYear = 2023;
+      
+      // Show additional info to user
+      toast({
+        title: "Generating Projections",
+        description: "Creating projections for all players. This may take a moment...",
+        variant: "default",
+      });
+      
+      // Process players in batches of 5 to avoid overwhelming the API
+      const batchSize = 5;
+      for (let i = 0; i < playersData.length; i += batchSize) {
+        const batch = playersData.slice(i, i + batchSize);
+        
+        // Process this batch in parallel
+        const batchPromises = batch.map(async (player) => {
+          if (!player || !player.player_id) return false;
+          
+          try {
+            // Check if projection already exists
+            const existingProjections = await ProjectionService.getPlayerProjections(
+              player.player_id,
+              baselineScenario.scenario_id,
+              seasonYear
+            );
+            
+            if (Array.isArray(existingProjections) && existingProjections.length > 0) {
+              console.log(`Projection already exists for ${player.name}`);
+              return true;
+            }
+            
+            // Create a new projection
+            const result = await ProjectionService.createBaseProjection(
+              player.player_id,
+              seasonYear,
+              baselineScenario.scenario_id
+            );
+            
+            console.log(`Created projection for ${player.name}:`, result);
+            return true;
+          } catch (error) {
+            console.error(`Error creating projection for ${player?.name || player?.player_id || 'unknown player'}:`, error);
+            return false;
+          }
+        });
+        
+        // Wait for this batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        successCount += batchResults.filter(result => result).length;
+        errorCount += batchResults.filter(result => !result).length;
+        
+        // Update progress log
+        console.log(`Processed ${i + batchSize > playersData.length ? playersData.length : i + batchSize}/${playersData.length} players`);
+        
+        // Add a small delay to prevent overwhelming the API
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      console.log(`Projection generation complete: ${successCount} successful, ${errorCount} failed`);
+      
+      // Show toast notification
+      toast({
+        title: "Projections Complete",
+        description: `Successfully generated ${successCount} projections with ${errorCount} failures.`,
+        variant: "default",
+      });
+      
+      // Reload the page data to show the new projections
+      window.location.reload();
+    } catch (err) {
+      console.error("Error running projections:", err);
+      setError(`Failed to run projections: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      
+      // Show error toast
+      toast({
+        title: "Projection Error",
+        description: `Failed to generate projections: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsRunningProjections(false);
+    }
   };
   
   const summaryStats = getSummaryStats();
@@ -306,7 +476,10 @@ const DashboardPage: React.FC = () => {
             </div>
             <div className="font-medium">{baselineScenario?.name || 'None'}</div>
           </div>
-          <Button size="sm" asChild>
+          <Button size="sm" variant="default" onClick={runBaselineProjections} disabled={isRunningProjections || !baselineScenario}>
+            {isRunningProjections ? "Running..." : "Run Projections"}
+          </Button>
+          <Button size="sm" variant="outline" asChild>
             <Link to="/scenarios">Manage Scenarios</Link>
           </Button>
         </div>
@@ -403,6 +576,22 @@ const DashboardPage: React.FC = () => {
                 <CardDescription>
                   Top projected fantasy point scorers
                 </CardDescription>
+                {!baselineScenario && (
+                  <div className="mt-2 p-2 bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 rounded-md text-sm">
+                    No baseline scenario found. Create a scenario to see projections.
+                  </div>
+                )}
+                {baselineScenario && Object.values(topProjections).every(arr => !arr || arr.length === 0) && (
+                  <div className="mt-2 p-2 bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 rounded-md text-sm">
+                    No projections found in the baseline scenario. Run projections to see players.
+                  </div>
+                )}
+                {isRunningProjections && (
+                  <div className="mt-2 p-2 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-md text-sm flex items-center">
+                    <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full mr-2"></div>
+                    Generating projections for all players... This may take a few moments.
+                  </div>
+                )}
               </CardHeader>
               <CardContent>
                 <Tabs defaultValue="QB" className="w-full">
@@ -427,9 +616,10 @@ const DashboardPage: React.FC = () => {
                           </TableHeader>
                           <TableBody>
                             {(topProjections[position] || []).map((projection, index) => {
+                              if (!projection || !projection.player_id) return null;
                               const { name, team } = getPlayerInfo(projection.player_id);
                               return (
-                                <TableRow key={projection.projection_id}>
+                                <TableRow key={projection.projection_id || `player-${index}`}>
                                   <TableCell className="font-medium">
                                     {index + 1}
                                   </TableCell>
@@ -443,7 +633,7 @@ const DashboardPage: React.FC = () => {
                                   </TableCell>
                                   <TableCell>{team}</TableCell>
                                   <TableCell className="text-right font-medium">
-                                    {projection.half_ppr.toFixed(1)}
+                                    {(projection.half_ppr || 0).toFixed(1)}
                                   </TableCell>
                                 </TableRow>
                               );
@@ -550,7 +740,7 @@ const DashboardPage: React.FC = () => {
               </p>
               <Button variant="outline" size="sm" asChild>
                 <Link to="/compare">
-                  <ArrowsRightLeftIcon className="h-4 w-4 mr-2" />
+                  <ArrowRightIcon className="h-4 w-4 mr-2" />
                   Compare Players
                 </Link>
               </Button>

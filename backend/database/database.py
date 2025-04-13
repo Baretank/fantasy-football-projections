@@ -1,8 +1,11 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+from pathlib import Path
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./data/fantasy_football.db"
+# Use the root data directory instead of the backend data directory
+ROOT_DIR = Path(__file__).parent.parent.parent
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{ROOT_DIR}/data/fantasy_football.db"
 
 # Create SQLAlchemy engine
 engine = create_engine(

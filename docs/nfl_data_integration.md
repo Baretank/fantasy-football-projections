@@ -284,7 +284,61 @@ The new NFL data import system offers several advantages:
 4. **More granular control**: Import specific data types as needed
 5. **Background processing**: Support for long-running imports in the background
 
-## 10. Resources and References
+## 10. Recent Improvements (April 2025)
+
+### Real NFL Team Stats
+
+We've replaced the mock/placeholder team stats with real NFL team statistics:
+
+1. **Enhanced NFLDataPyAdapter.get_team_stats()**: 
+   - Now uses multiple sources for the most complete team data
+   - Tries official team_season_stats first as the primary source
+   - Falls back to team_stats endpoint if the primary source fails
+   - As a last resort, aggregates from weekly player data
+
+2. **Improved TeamStatService.import_team_stats()**:
+   - Now directly uses the NFLDataPyAdapter instead of mock data
+   - Maintains the same consistent interface for TeamStat model fields
+   - Compatible with existing test frameworks
+
+3. **Better Data Quality**:
+   - Performs data validation to ensure consistency
+   - Logs detailed information about data sources and quality
+   - Handles missing fields gracefully with sensible defaults
+
+4. **Flexible Fallback Mechanisms**:
+   - Prioritizes the most reliable data sources
+   - Progressive fallbacks for specific fields and calculations
+   - Ensures system never fails completely due to missing data
+
+## 10. Recent Improvements (April 2025)
+
+### Real NFL Team Stats
+
+We've replaced the mock/placeholder team stats with real NFL team statistics:
+
+1. **Enhanced NFLDataPyAdapter.get_team_stats()**: 
+   - Now uses multiple sources for the most complete team data
+   - Tries official team_season_stats first as the primary source
+   - Falls back to team_stats endpoint if the primary source fails
+   - As a last resort, aggregates from weekly player data
+
+2. **Improved TeamStatService.import_team_stats()**:
+   - Now directly uses the NFLDataPyAdapter instead of mock data
+   - Maintains the same consistent interface for TeamStat model fields
+   - Compatible with existing test frameworks
+
+3. **Better Data Quality**:
+   - Performs data validation to ensure consistency
+   - Logs detailed information about data sources and quality
+   - Handles missing fields gracefully with sensible defaults
+
+4. **Flexible Fallback Mechanisms**:
+   - Prioritizes the most reliable data sources
+   - Progressive fallbacks for specific fields and calculations
+   - Ensures system never fails completely due to missing data
+
+## 11. Resources and References
 
 1. [nfl-data-py package documentation](https://pypi.org/project/nfl-data-py/)
 2. [NFL API Resources Gist](https://gist.github.com/nntrn/ee26cb2a0716de0947a0a4e9a157bc1c)

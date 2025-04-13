@@ -34,6 +34,7 @@ def mock_stats_provider():
 def team_stats_service(test_db, mock_stats_provider):
     """Create TeamStatService with mock provider."""
     service = TeamStatService(test_db)
+    # No need to set stats_provider directly now, as the service will use NFLDataPyAdapter
     return service
 
 # Create in-memory test database

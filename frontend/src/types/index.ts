@@ -40,7 +40,7 @@ export interface Projection extends BaseEntity {
   pass_yards?: number;
   pass_td?: number;
   interceptions?: number;
-  carries?: number;
+  rush_attempts?: number;  // Updated from carries to match backend field name
   rush_yards?: number;
   rush_td?: number;
   targets?: number;
@@ -168,6 +168,33 @@ export interface BatchOverrideResponse {
   results: Record<string, BatchOverrideResult>;
 }
 
+export interface StatVariance {
+  mean: number;
+  stddev: number;
+  min: number;
+  max: number;
+  sample_size: number;
+}
+
+export interface ProjectionVarianceResponse {
+  projection_id: string;
+  player_id: string;
+  position: string;
+  variance: Record<string, StatVariance>;
+}
+
+export interface ProjectionRangeResponse {
+  projection_id: string;
+  player_id: string;
+  position: string;
+  confidence: number;
+  range: Record<string, {
+    low: number;
+    high: number;
+  }>;
+  scenarios_created?: string[];
+}
+
 export interface ErrorResponse {
   detail: string;
   code?: string;
@@ -182,19 +209,19 @@ export interface SuccessResponse {
 // Position-specific stat groups
 export const QB_STATS = {
   passing: ['pass_attempts', 'completions', 'pass_yards', 'pass_td', 'interceptions', 'sacks'],
-  rushing: ['carries', 'rush_yards', 'rush_td', 'fumbles'],
+  rushing: ['rush_attempts', 'rush_yards', 'rush_td', 'fumbles'],
   efficiency: ['comp_pct', 'yards_per_att', 'net_yards_per_att', 'pass_td_rate', 'int_rate', 'sack_rate']
 };
 
 export const RB_STATS = {
-  rushing: ['carries', 'rush_yards', 'rush_td', 'fumbles'],
+  rushing: ['rush_attempts', 'rush_yards', 'rush_td', 'fumbles'],
   receiving: ['targets', 'receptions', 'rec_yards', 'rec_td'],
   efficiency: ['yards_per_carry', 'net_yards_per_carry', 'rush_td_rate', 'catch_pct', 'yards_per_target']
 };
 
 export const WR_TE_STATS = {
   receiving: ['targets', 'receptions', 'rec_yards', 'rec_td'],
-  rushing: ['carries', 'rush_yards', 'rush_td'],
+  rushing: ['rush_attempts', 'rush_yards', 'rush_td'],
   efficiency: ['catch_pct', 'yards_per_target', 'rec_td_rate', 'target_share']
 };
 
@@ -216,101 +243,101 @@ export interface StatDisplayFormat {
 export const STAT_FORMATS: Record<string, StatDisplayFormat> = {
   half_ppr: { 
     label: 'Half PPR', 
-    formatter: (value) => value.toFixed(1) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0'
   },
   pass_attempts: { 
     label: 'Pass Att', 
-    formatter: (value) => value.toFixed(0) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   completions: { 
     label: 'Completions', 
-    formatter: (value) => value.toFixed(0) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   pass_yards: { 
     label: 'Pass Yards', 
-    formatter: (value) => value.toFixed(0) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   pass_td: { 
     label: 'Pass TD', 
-    formatter: (value) => value.toFixed(1) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0'
   },
   interceptions: { 
     label: 'INT', 
-    formatter: (value) => value.toFixed(1) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0'
   },
-  carries: { 
+  rush_attempts: { 
     label: 'Carries', 
-    formatter: (value) => value.toFixed(0) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   rush_yards: { 
     label: 'Rush Yards', 
-    formatter: (value) => value.toFixed(0) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   rush_td: { 
     label: 'Rush TD', 
-    formatter: (value) => value.toFixed(1) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0'
   },
   targets: { 
     label: 'Targets', 
-    formatter: (value) => value.toFixed(0) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   receptions: { 
     label: 'Receptions', 
-    formatter: (value) => value.toFixed(0) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   rec_yards: { 
     label: 'Rec Yards', 
-    formatter: (value) => value.toFixed(0) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   rec_td: { 
     label: 'Rec TD', 
-    formatter: (value) => value.toFixed(1) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0'
   },
   comp_pct: { 
     label: 'Comp %', 
-    formatter: (value) => (value * 100).toFixed(1) + '%',
-    color: (value) => value > 0.65 ? 'text-green-500' : value < 0.58 ? 'text-red-500' : 'text-amber-500'
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%',
+    color: (value) => value !== null && value !== undefined ? (value > 0.65 ? 'text-green-500' : value < 0.58 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
   },
   yards_per_att: { 
     label: 'YPA', 
-    formatter: (value) => value.toFixed(1),
-    color: (value) => value > 7.5 ? 'text-green-500' : value < 6.5 ? 'text-red-500' : 'text-amber-500'
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0',
+    color: (value) => value !== null && value !== undefined ? (value > 7.5 ? 'text-green-500' : value < 6.5 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
   },
   pass_td_rate: { 
     label: 'TD %', 
-    formatter: (value) => (value * 100).toFixed(1) + '%',
-    color: (value) => value > 0.05 ? 'text-green-500' : value < 0.03 ? 'text-red-500' : 'text-amber-500'
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%',
+    color: (value) => value !== null && value !== undefined ? (value > 0.05 ? 'text-green-500' : value < 0.03 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
   },
   int_rate: { 
     label: 'INT %', 
-    formatter: (value) => (value * 100).toFixed(1) + '%',
-    color: (value) => value < 0.02 ? 'text-green-500' : value > 0.035 ? 'text-red-500' : 'text-amber-500'
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%',
+    color: (value) => value !== null && value !== undefined ? (value < 0.02 ? 'text-green-500' : value > 0.035 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
   },
   yards_per_carry: { 
     label: 'YPC', 
-    formatter: (value) => value.toFixed(1),
-    color: (value) => value > 4.5 ? 'text-green-500' : value < 3.5 ? 'text-red-500' : 'text-amber-500'
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0',
+    color: (value) => value !== null && value !== undefined ? (value > 4.5 ? 'text-green-500' : value < 3.5 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
   },
   catch_pct: { 
     label: 'Catch %', 
-    formatter: (value) => (value * 100).toFixed(1) + '%',
-    color: (value) => value > 0.7 ? 'text-green-500' : value < 0.6 ? 'text-red-500' : 'text-amber-500'
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%',
+    color: (value) => value !== null && value !== undefined ? (value > 0.7 ? 'text-green-500' : value < 0.6 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
   },
   yards_per_target: { 
     label: 'YPT', 
-    formatter: (value) => value.toFixed(1),
-    color: (value) => value > 8.5 ? 'text-green-500' : value < 7.0 ? 'text-red-500' : 'text-amber-500'
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0',
+    color: (value) => value !== null && value !== undefined ? (value > 8.5 ? 'text-green-500' : value < 7.0 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
   },
   target_share: { 
     label: 'Tgt Share', 
-    formatter: (value) => (value * 100).toFixed(1) + '%' 
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%'
   },
   fumbles: { 
     label: 'Fumbles', 
-    formatter: (value) => value.toFixed(1) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0'
   },
   sacks: { 
     label: 'Sacks', 
-    formatter: (value) => value.toFixed(1) 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0'
   }
 };

@@ -15,7 +15,7 @@ from backend.services.scenario_service import ScenarioService
 import logging
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/scenarios", tags=["scenarios"])
+router = APIRouter(tags=["scenarios"])
 
 @router.post(
     "/",

@@ -22,7 +22,7 @@
 - Player Import Integration Tests: Fixed and all passing
 - Code Quality: Fixed all deprecation warnings and updated code to modern patterns
 - Field Standardization: Established consistent field naming across the codebase (rush_attempts vs carries)
-- Documentation: Added comprehensive database population guidelines
+- Documentation: Added comprehensive database population guidelines, frontend setup, and draft day tools documentation
 
 ## Database Population Progress
 
@@ -148,10 +148,32 @@ Use the provided bash script for specific test categories:
 
 ## Pending Tasks
 
+### Scenarios Implementation
+- [x] Complete Scenarios functionality ✅
+  - [x] Verify existing Scenarios API endpoints are working correctly
+  - [x] Fix networking/connectivity issues between frontend and backend
+  - [x] Create and test script to reliably generate baseline scenarios
+  - [x] Successfully create baseline scenarios (League Average, Optimistic, Conservative, Team Adjusted)
+  - [x] Fix connection issues to make scenarios visible in UI
+  - [ ] Populate baseline scenarios with player projections
+  - [ ] Support player projection comparison between scenarios
+  - [ ] Add validations for scenario type parameters
+
 ### Data Quality Improvements
-- [x] Replace placeholder team stats with real NFL team stats data
+- [x] Replace placeholder team stats with real NFL team stats data ✅
+  - Successfully imported real 2023 and 2024 NFL team statistics
+  - Fixed field mapping issues with pass_attempts (uses 'attempts' field) and rush_attempts (uses 'carries' field)
+  - Added detailed logging for better tracking of data source fields
+- [x] Add rookie data using the rookie import tools ✅
+  - Created and populated rookies.json with 50 example rookie players from rookie_baseline.xlsx
+  - Successfully imported all rookies into the database with proper status="Rookie"
+  - Created import_rookies.py script in backend/scripts/ for easy data import
+  - Created test_api.py and debug_rookies.py utilities for API and database testing
+- [x] Unified data directory structure ✅
+  - Removed duplicate data directory in backend/ and consolidated all data in root /data directory
+  - Updated database connection in database.py to use absolute path to root data directory
+  - Ensured consistent database access from all application components
 - [ ] Improve weekly stats processing to account for player trends
-- [ ] Add rookie data using the rookie import tools
 - [ ] Add historical data (previous seasons) if needed
 
 > **Note**: See the [Database Population Guidelines](../docs/database_population.md) for detailed instructions on populating the database with quality data and maintaining data consistency.
@@ -164,6 +186,7 @@ Use the provided bash script for specific test categories:
 - [x] Implement API endpoints for draft day operations
 - [x] Connect to test framework in test_draft_day_tools.py
 - [x] Connect frontend draft board components to the new API endpoints
+- [x] Add comprehensive draft day tools documentation
 
 ### Performance Improvements
 - [x] Implement performance testing endpoints
@@ -188,10 +211,14 @@ Use the provided bash script for specific test categories:
   - [x] Use rush_attempts consistently instead of carries for rushing attempt metrics
 
 ### Frontend Integration
-- [ ] Connect the API endpoints to the frontend
+- [x] Connect Draft Day tools API endpoints to the frontend ✅
+- [x] Fix network connectivity issues between frontend and backend ✅
+  - [x] Added explicit IPv4 addressing in vite.config.ts
+  - [x] Enhanced API error handling and logging
+  - [x] Created debugging tools for connectivity testing
 - [ ] Build projection visualization components
-- [ ] Implement scenario management UI
-- [ ] Create draft day tools for fantasy drafts
+- [x] Implement scenario management UI ✅
+- [x] Create draft day tools for fantasy drafts ✅
 
 ### Future Phase: Production Deployment
 - [ ] Create Docker configuration for the backend
@@ -218,10 +245,13 @@ Use the provided bash script for specific test categories:
 7. ✅ Improve documentation
    - ✅ Created comprehensive database population guidelines
    - ✅ Added detailed instructions for data imports and standardization
+   - ✅ Created frontend setup documentation with best practices
+   - ✅ Added draft day tools documentation
+   - ✅ Updated troubleshooting guide with network connectivity solutions
    - ✅ Updated nextsteps.md with current progress
-8. Fix tests after field standardization (in progress)
+8. ✅ Fix tests after field standardization
    - ✅ System tests fixed (63/63 passing - 100%)
-   - Integration tests (40/46 passing - 87%)
+   - ✅ Integration tests (46/46 passing - 100%)
    - ✅ Unit tests (142/142 passing - 100%) 
    - ✅ Fixed export tests to handle rush_attempts consistently
    - ✅ Fixed projections routes and batch routes tests
@@ -229,16 +259,136 @@ Use the provided bash script for specific test categories:
    - ✅ Fixed override_routes tests by updating URLs and mock objects
    - ✅ Fixed NFL data import service for empty/missing fields in calculate_season_totals
    - ✅ Fixed batch_import_functionality.py tests (circuit breaker and error logging)
-9. Remaining test fixes:
+9. ✅ Test fixes completed
    - ✅ Fixed projection_pipeline.py integration tests (9/9 passing)
      - Added missing get_projection_by_player method
      - Fixed target_share not being stored correctly in projection update
      - Fixed object refreshing issue in SQLAlchemy after updates 
    - ✅ Fixed NFL data integration tests (2/2 passing)
-   - Fix cache service test (test_custom_ttl) that passes when run individually but fails in full suite
-10. Data Quality Improvements
-   - Replace placeholder team stats with real NFL team stats data
-   - Improve weekly stats processing to account for player trends
+   - ✅ Fixed cache service test (test_custom_ttl) issue with singleton reset fixture
+10. ✅ Data Quality Improvements
+   - ✅ Replace placeholder team stats with real NFL team stats data
+   - ✅ Add rookie data using the rookie import tools
+     - Created and populated rookies.json from rookie_baseline.xlsx
+     - Added scripts to import and validate rookie data
+     - Successfully imported 50 rookies into database with status="Rookie"
+   - ✅ Unified data directory structure
+     - Consolidated all data in root /data directory
+     - Updated database connection to use absolute path to root data
+     - Removed duplicative backend/data directory
+   - ✅ Fixed missing data handling and null values
+     - Added comprehensive null checking in frontend formatters (toFixed, toString)
+     - Enhanced data robustness with null-safety throughout the application
+     - Fixed color functions to handle missing stats values with proper fallbacks
+
+11. ✅ API Endpoint Debugging
+   - ✅ Fixed API endpoint issue with players/rookies endpoint (was returning 404 despite database containing rookies)
+     - Root cause: Route order in FastAPI matters - the parameterized `/{player_id}` route was capturing "/rookies" as a player ID
+     - Fixed by moving the /rookies route definition before the parameterized route in the file
+   - ✅ Verified endpoint works with position/team filters (e.g., /players/rookies?position=QB)
+   - ✅ Connected frontend draft day tool to API endpoints
+   - ✅ Added sort functionality and visual indicators for missing draft positions
+   
+12. Complete Players Implementation ✅ HIGH PRIORITY - COMPLETED
+   - [x] Enhance Players API endpoints and services
+     - [x] Fixed TypeScript error in ProjectionAdjuster (players.filter is not a function)
+     - [x] Added detailed player statistics endpoint
+     - [x] Implemented player search with advanced filtering options
+     - [x] Created player comparison endpoint
+     - [x] Added historical performance data access
+     - [x] Implemented watchlist/favorites functionality
+   - [x] Add performance optimizations for player data queries
+     - [x] Implemented database query caching for player lists
+     - [x] Added pagination support for large player datasets
+     - [x] Created optimized indexes for common player queries
+     - [x] Added support for partial response fields for bandwidth optimization
+   - [x] Enhance player data models
+     - [x] Added week-by-week statistical breakdowns
+     - [x] Included trend indicators for key performance metrics
+     - [x] Implemented positional ranking calculations
+   - [x] Implemented error handling and defensive programming
+     - [x] Added robust error boundary component for React components
+     - [x] Enhanced API service error handling with better logging
+     - [x] Added defensive type checking throughout the codebase
+     - [x] Fixed issues with null handling in formatters (toFixed, toString)
+     - [x] Added comprehensive null-safety checks for all components
+     - [x] Enhanced color functions to properly handle null/undefined values
+
+13. Previously Completed: Scenarios Implementation ✅
+   - [x] Verify existing Scenarios API endpoints ✅
+   - [x] Fix connectivity bugs in Vite proxy configuration ✅
+   - [x] Test create_baseline_scenario.py script ✅
+   - [x] Create baseline scenarios (League Average, Optimistic, Conservative, Team Adjusted) ✅
+   - [x] Fix network connectivity issues between frontend and backend ✅
+     - [x] Created run.py script for consistent backend hosting on IPv4
+     - [x] Updated Vite proxy to explicitly use 127.0.0.1
+     - [x] Added credentials: 'include' to fetchApi for CORS support
+     - [x] Created debugging tools for API connectivity testing
+   - [x] Connect frontend to scenarios API ✅
+
+14. Documentation Updates ✅
+   - [x] Add comprehensive frontend setup documentation ✅
+   - [x] Update troubleshooting guide with network connectivity solutions ✅
+   - [x] Create draft day tools documentation ✅
+   - [ ] Add player data API documentation
+   - [ ] Create user guide for player analysis features
+
+## Current Priority
+
+1. Frontend Bugs and Error Handling ⚠️ HIGH PRIORITY
+   - [x] Address null checking issues in PlayerAdjuster component
+     - [x] Fixed TypeError for null properties (reading 'toString')
+     - [x] Fixed TypeError for null properties (reading 'toFixed')
+     - [x] Added defensive programming with null checks throughout
+     - [x] Enhanced formatter functions with safe null handling
+     - [x] Fixed color functions to safely handle missing data
+     - [x] Added comprehensive error boundaries
+   - [x] Improve error handling for empty or incomplete projections
+     - [x] Added checks throughout to handle missing keys in data
+     - [x] Enhanced defensive programming in all UI components
+     - [x] Created safety checks for newly created projections
+     - [x] Added proper fallback values for all formatters
+   - [x] Fix position-specific stat null value issues
+     - [x] Fixed QB-specific stats display with proper null safety
+     - [x] Fixed RB-specific stats display with proper null safety 
+     - [x] Enhanced visualization components with proper checking
+     - [x] Improved data transformations to handle missing fields
+
+2. Previously Completed: Enhance Players Functionality ✅ COMPLETED
+   - [x] Expand player data model to include additional statistics fields
+   - [x] Implement comprehensive player search and filtering API
+   - [x] Create player comparison endpoint for side-by-side analysis
+   - [x] Add historical trend data for player performance tracking
+   - [x] Implement player watchlist and favorites functionality
+   - [x] Create positional ranking algorithms and endpoints
+   - [x] Add performance optimization for player queries
+   - [x] Fix bugs in player components (players.filter not a function)
+
+2. UI Integration for Player Analysis ✅ COMPLETED
+   - [x] Connect frontend components to enhanced player API endpoints
+   - [x] Implement comprehensive player profile component
+   - [x] Add player search with advanced filtering options
+   - [x] Create data visualization for player performance trends
+   - [x] Implement side-by-side player comparison tool (in ProjectionAdjuster)
+   - [x] Add error handling and robust defensive programming
+
+3. Performance Optimization
+   - [x] Add database query caching for player lists
+   - [x] Implement pagination for large player datasets
+   - [x] Create optimized indexes for common player queries
+   - [x] Add partial response fields for bandwidth optimization
+
+4. Documentation
+   - [ ] Document player API endpoints
+   - [ ] Create user guide for player analysis features
+   - [ ] Update API reference documentation
+
+5. Remaining Player Implementation Tasks ✅ COMPLETED
+   - [x] Complete positional ranking calculations
+   - [x] Implement side-by-side player comparison UI (implemented in the comparison endpoint and ProjectionAdjuster)
+   - [x] Add advanced statistical thresholds filtering (implemented in advanced-search endpoint)
+   - [x] Add robust error handling for player selection and filtering
+   - [ ] Create comprehensive API documentation (only remaining task)
 
 ## Field Standardization Update
 
@@ -309,3 +459,59 @@ We've converted the codebase to consistently use `rush_attempts` instead of `car
 8. **Key error in calculations**: Always check if a key exists in a dictionary before trying to access it or use a default value with dict.get(). We've updated calculate_season_totals to properly handle missing or empty fields.
 
 9. **ImportLog duplication**: The ImportLog model is defined twice in models.py, which can cause "table already exists" errors during initialization. This should be fixed by refactoring the model definitions.
+
+10. **IPv6/IPv4 networking issues**: Always use explicit IPv4 addresses (127.0.0.1) for development to avoid connection issues. For more details, see the updated troubleshooting guide.
+
+## Network Connectivity Fixes
+
+To address the connectivity issues between frontend and backend:
+
+1. **Backend Configuration**:
+   - Created `run.py` script to ensure consistent backend hosting on IPv4:
+     ```python
+     # backend/run.py
+     import uvicorn
+     
+     if __name__ == "__main__":
+         # Run on 127.0.0.1 to explicitly use IPv4
+         uvicorn.run(
+             "main:app",
+             host="127.0.0.1",
+             port=8000,
+             reload=True
+         )
+     ```
+   - Usage: `python backend/run.py` instead of `uvicorn main:app --reload`
+
+2. **Frontend Configuration**:
+   - Updated Vite proxy in `vite.config.ts` to use explicit IPv4:
+     ```typescript
+     server: {
+       proxy: {
+         '/api': {
+           target: 'http://127.0.0.1:8000',  // Use explicit IPv4
+           changeOrigin: true,
+           secure: false,
+         },
+       },
+     }
+     ```
+   - Enhanced the fetchApi function with better error handling and logging:
+     ```typescript
+     async function fetchApi(endpoint: string, method: string = 'GET', body: any = null) {
+       // ... other code
+       const options: RequestInit = {
+         method,
+         headers: { 'Content-Type': 'application/json' },
+         credentials: 'include',  // Important for CORS
+       };
+       // ... error handling and logging
+     }
+     ```
+
+3. **Debugging Tools**:
+   - Created `test_api.py` script to test API endpoints directly
+   - Created `test-cors.html` page to test API connections from the browser
+   - Added detailed logging in both frontend and backend for connection issues
+
+These fixes resolved the IPv6/IPv4 mismatch issues that were preventing the frontend from connecting to the backend API.

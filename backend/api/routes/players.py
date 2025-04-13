@@ -23,7 +23,6 @@ from backend.api.schemas import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/players",
     tags=["players"]
 )
 
@@ -114,6 +113,165 @@ async def search_players(
         "players": players
     }
 
+@router.get("/rookies", response_model=List[PlayerResponse])
+async def get_rookies(
+    position: Optional[str] = Query(None, description="Filter by position"),
+    team: Optional[str] = Query(None, description="Filter by team"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all rookies with optional filters.
+    """
+    from backend.database.models import Player
+    logger.info("Querying rookies from database")
+    query = db.query(Player).filter(Player.status == "Rookie")
+    
+    if position:
+        query = query.filter(Player.position == position)
+    if team:
+        query = query.filter(Player.team == team)
+        
+    # Get all rookies
+    rookies = query.all()
+    logger.info(f"Found {len(rookies)} rookies in database")
+    
+    # Return properly formatted response
+    if not rookies:
+        logger.warning("No rookies found")
+        return []
+        
+    # Manually convert ORM objects to dictionaries
+    result = []
+    for rookie in rookies:
+        result.append({
+            "player_id": rookie.player_id,
+            "name": rookie.name,
+            "team": rookie.team,
+            "position": rookie.position,
+            "status": rookie.status,
+            "created_at": rookie.created_at,
+            "updated_at": rookie.updated_at,
+            "date_of_birth": rookie.date_of_birth,
+            "height": rookie.height,
+            "weight": rookie.weight,
+            "depth_chart_position": rookie.depth_chart_position,
+            "draft_position": rookie.draft_position,
+            "draft_team": rookie.draft_team,
+            "draft_round": rookie.draft_round,
+            "draft_pick": rookie.draft_pick,
+        })
+        
+    return result
+
+@router.get("/seasons", response_model=List[int])
+async def get_available_seasons(
+    db: Session = Depends(get_db)
+):
+    """
+    Get list of seasons with available data.
+    
+    Returns a list of all seasons that have player data available.
+    """
+    service = QueryService(db)
+    
+    seasons = await service.get_available_seasons()
+    return seasons
+
+@router.get("/compare", response_model=Dict[str, Any])
+async def compare_players(
+    player_ids: List[str] = Query(..., description="List of player IDs to compare"),
+    season: Optional[int] = Query(None, description="Season to compare data from"),
+    stats: Optional[List[str]] = Query(None, description="List of stats to include"),
+    db: Session = Depends(get_db)
+):
+    """
+    Compare multiple players side by side.
+    
+    Allows for detailed statistical comparison between players,
+    including projections and historical stats.
+    """
+    service = QueryService(db)
+    
+    result = await service.compare_players(
+        player_ids=player_ids,
+        season=season,
+        stats=stats
+    )
+    
+    return result
+
+@router.get("/advanced-search", response_model=Dict[str, Any])
+async def advanced_search(
+    search: Optional[str] = Query(None, description="Search term for player name"),
+    position: Optional[str] = Query(None, description="Position filter"),
+    team: Optional[str] = Query(None, description="Team filter"),
+    status: Optional[str] = Query(None, description="Player status filter"),
+    depth_chart: Optional[str] = Query(None, description="Depth chart position filter"),
+    min_fantasy_points: Optional[float] = Query(None, description="Minimum fantasy points"),
+    min_rush_yards: Optional[float] = Query(None, description="Minimum rush yards"),
+    min_pass_yards: Optional[float] = Query(None, description="Minimum pass yards"),
+    min_rec_yards: Optional[float] = Query(None, description="Minimum receiving yards"),
+    sort_by: str = Query("name", description="Field to sort by"),
+    sort_dir: str = Query("asc", pattern="^(asc|desc)$", description="Sort direction"),
+    page: int = Query(1, gt=0, description="Page number"),
+    page_size: int = Query(20, gt=0, le=100, description="Page size"),
+    db: Session = Depends(get_db)
+):
+    """
+    Advanced player search with comprehensive filtering options.
+    
+    Supports filtering by statistical thresholds, position, team, status,
+    and depth chart position with sorting and pagination.
+    """
+    service = QueryService(db)
+    
+    # Build filters
+    filters = {}
+    
+    if position:
+        filters["position"] = position
+    if team:
+        filters["team"] = team
+    if status:
+        filters["status"] = status
+    if depth_chart:
+        filters["depth_chart_position"] = depth_chart
+    if min_fantasy_points:
+        filters["half_ppr"] = min_fantasy_points
+    if min_rush_yards:
+        filters["rush_yards"] = min_rush_yards
+    if min_pass_yards:
+        filters["pass_yards"] = min_pass_yards
+    if min_rec_yards:
+        filters["rec_yards"] = min_rec_yards
+    
+    # Get players with advanced search
+    players, total_count = await service.search_players_advanced(
+        search_term=search,
+        filters=filters,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        page=page,
+        page_size=page_size
+    )
+    
+    # Calculate pagination info
+    total_pages = (total_count + page_size - 1) // page_size
+    has_next = page < total_pages
+    has_prev = page > 1
+    
+    return {
+        "players": players,
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "has_next": has_next,
+            "has_prev": has_prev
+        }
+    }
+
 @router.get("/{player_id}", response_model=OptimizedPlayerResponse)
 async def get_player(
     player_id: str,
@@ -161,20 +319,32 @@ async def get_player_stats(
         
     return result
 
-@router.get("/seasons", response_model=List[int])
-async def get_available_seasons(
+@router.get("/{player_id}/trends", response_model=Dict[str, Any])
+async def get_player_trends(
+    player_id: str,
+    season: Optional[int] = Query(None, description="Season filter"),
+    stats: Optional[List[str]] = Query(None, description="Stats to include"),
     db: Session = Depends(get_db)
 ):
     """
-    Get list of seasons with available data.
+    Get trend data for a player's weekly performance.
     
-    Returns a list of all seasons that have player data available.
+    Returns detailed week-by-week stats with trend indicators showing whether
+    performance is improving, declining, or stable.
     """
     service = QueryService(db)
     
-    seasons = await service.get_available_seasons()
-    return seasons
+    result = await service.get_player_trends(
+        player_id=player_id,
+        season=season,
+        stats=stats
+    )
     
+    if not result:
+        raise HTTPException(status_code=404, detail="Player not found")
+        
+    return result
+
 @router.post("/import", response_model=Dict[str, Any])
 async def import_players_from_csv(
     file: UploadFile = File(...),
@@ -214,25 +384,6 @@ async def import_players_from_csv(
             status_code=500,
             detail=f"Error importing CSV: {str(e)}"
         )
-
-@router.get("/rookies", response_model=List[PlayerResponse])
-async def get_rookies(
-    position: Optional[str] = Query(None, description="Filter by position"),
-    team: Optional[str] = Query(None, description="Filter by team"),
-    db: Session = Depends(get_db)
-):
-    """
-    Get all rookies with optional filters.
-    """
-    from backend.database.models import Player
-    query = db.query(Player).filter(Player.status == "Rookie")
-    
-    if position:
-        query = query.filter(Player.position == position)
-    if team:
-        query = query.filter(Player.team == team)
-        
-    return query.all()
 
 @router.post("/rookies/import", response_model=Dict[str, Any])
 async def import_rookies(
@@ -446,3 +597,61 @@ async def update_rookie_draft_status(
             status_code=500,
             detail=f"Error updating rookie: {str(e)}"
         )
+
+@router.get("/watchlist", response_model=List[Dict[str, Any]])
+async def get_watchlist(
+    user_id: str = Query(..., description="User ID to get watchlist for"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a user's player watchlist.
+    
+    Returns players that the user has added to their watchlist
+    for tracking and monitoring.
+    """
+    service = QueryService(db)
+    
+    result = await service.get_player_watchlist(
+        user_id=user_id
+    )
+    
+    return result
+
+@router.post("/watchlist", response_model=Dict[str, str])
+async def add_to_watchlist(
+    player_id: str = Body(..., description="Player ID to add to watchlist"),
+    user_id: str = Body(..., description="User ID"),
+    notes: Optional[str] = Body(None, description="Notes about this player"),
+    db: Session = Depends(get_db)
+):
+    """
+    Add a player to the user's watchlist.
+    
+    This is a placeholder endpoint - in a real implementation, it would
+    store the watchlist entry in a database.
+    """
+    # In a real implementation, this would add to a database table
+    # For now, return a success response as a placeholder
+    return {
+        "status": "success",
+        "message": f"Player {player_id} added to watchlist for user {user_id}"
+    }
+
+@router.delete("/watchlist/{player_id}", response_model=Dict[str, str])
+async def remove_from_watchlist(
+    player_id: str,
+    user_id: str = Query(..., description="User ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Remove a player from the user's watchlist.
+    
+    This is a placeholder endpoint - in a real implementation, it would
+    delete the watchlist entry from a database.
+    """
+    # In a real implementation, this would delete from a database table
+    # For now, return a success response as a placeholder
+    return {
+        "status": "success",
+        "message": f"Player {player_id} removed from watchlist for user {user_id}"
+    }

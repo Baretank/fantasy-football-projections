@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  darkMode: ["class"],
+  darkMode: ["class"], // Using array syntax as recommended by Tailwind
   content: [
     './pages/**/*.{ts,tsx}',
     './components/**/*.{ts,tsx}',

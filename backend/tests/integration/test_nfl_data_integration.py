@@ -186,6 +186,50 @@ class TestNFLDataIntegration:
         ).all()
         
         return {stat.stat_type: stat.value for stat in base_stats}
+        
+    @pytest.mark.asyncio
+    @patch('backend.services.adapters.nfl_data_py_adapter.NFLDataPyAdapter.get_players')
+    async def test_position_filtering(self, mock_get_players, db):
+        """Test that position filtering works in the player import process."""
+        # Create a mock dataset with both fantasy and non-fantasy positions
+        player_data = pd.DataFrame({
+            'player_id': ['player1', 'player2', 'player3', 'player4', 'player5', 'player6'],
+            'gsis_id': ['player1', 'player2', 'player3', 'player4', 'player5', 'player6'],
+            'display_name': ['QB Player', 'RB Player', 'WR Player', 'TE Player', 'K Player', 'P Player'],
+            'position': ['QB', 'RB', 'WR', 'TE', 'K', 'P'],  # K and P should be filtered out
+            'team': ['KC', 'SF', 'DAL', 'GB', 'NYJ', 'CHI'],
+            'team_abbr': ['KC', 'SF', 'DAL', 'GB', 'NYJ', 'CHI'],
+            'status': ['ACT', 'ACT', 'ACT', 'ACT', 'ACT', 'ACT'],
+            'height': ['6-2', '5-11', '6-0', '6-5', '6-0', '6-1'],
+            'weight': [215, 205, 190, 250, 200, 195]
+        })
+        
+        # Setup mock return
+        mock_get_players.return_value = player_data
+        
+        # Initialize service and run import
+        service = NFLDataImportService(db)
+        season = 2023
+        
+        # Execute import operation
+        results = await service.import_players(season)
+        
+        # Verify only fantasy-relevant positions were imported
+        players = db.query(Player).all()
+        assert len(players) == 4  # Should only have QB, RB, WR, TE
+        
+        # Check positions
+        position_count = db.query(Player.position).distinct().count()
+        assert position_count == 4
+        
+        # Verify specific positions
+        positions = [p.position for p in players]
+        assert "QB" in positions
+        assert "RB" in positions
+        assert "WR" in positions
+        assert "TE" in positions
+        assert "K" not in positions
+        assert "P" not in positions
     
     @pytest.mark.asyncio
     @patch('backend.services.adapters.nfl_data_py_adapter.NFLDataPyAdapter.get_players')

@@ -2,6 +2,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from contextlib import asynccontextmanager
+import sys
+import os
+from pathlib import Path
+
+# Add the parent directory to Python path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from backend.api.routes import players_router, projections_router, overrides_router, scenarios_router
 from backend.api.routes.batch import router as batch_router
 from backend.api.routes.draft import router as draft_router
@@ -75,7 +82,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:5173", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -108,4 +115,4 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="localhost", port=8000)

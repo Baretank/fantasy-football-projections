@@ -96,15 +96,25 @@ const TeamAdjuster: React.FC = () => {
         setTeamStats(mockTeamStats);
 
         // Fetch players for this team
-        const players = await PlayerService.getPlayers(undefined, selectedTeam);
+        const playersResponse = await PlayerService.getPlayers(undefined, selectedTeam);
+        
+        // Handle the response structure properly (playersResponse is { players: [], pagination: {} })
+        const players = Array.isArray(playersResponse?.players) 
+          ? playersResponse.players 
+          : [];
+        
         setTeamPlayers(players);
-
+        
         // Fetch projections for these players
         const projections: Projection[] = [];
-        for (const player of players) {
-          const playerProjections = await ProjectionService.getPlayerProjections(player.player_id);
-          if (playerProjections.length > 0) {
-            projections.push(playerProjections[0]);
+        if (Array.isArray(players)) {
+          for (const player of players) {
+            if (player && player.player_id) {
+              const playerProjections = await ProjectionService.getPlayerProjections(player.player_id);
+              if (Array.isArray(playerProjections) && playerProjections.length > 0) {
+                projections.push(playerProjections[0]);
+              }
+            }
           }
         }
         setTeamProjections(projections);
@@ -166,12 +176,18 @@ const TeamAdjuster: React.FC = () => {
       // Refetch team projections to show updated values
       const players = teamPlayers;
       const projections: Projection[] = [];
-      for (const player of players) {
-        const playerProjections = await ProjectionService.getPlayerProjections(player.player_id);
-        if (playerProjections.length > 0) {
-          projections.push(playerProjections[0]);
+      
+      if (Array.isArray(players)) {
+        for (const player of players) {
+          if (player && player.player_id) {
+            const playerProjections = await ProjectionService.getPlayerProjections(player.player_id);
+            if (Array.isArray(playerProjections) && playerProjections.length > 0) {
+              projections.push(playerProjections[0]);
+            }
+          }
         }
       }
+      
       setTeamProjections(projections);
 
     } catch (err) {
@@ -194,31 +210,41 @@ const TeamAdjuster: React.FC = () => {
   };
 
   // Group team players by position
-  const playersByPosition = teamPlayers.reduce((acc, player) => {
-    if (!acc[player.position]) {
-      acc[player.position] = [];
-    }
-    acc[player.position].push(player);
-    return acc;
-  }, {} as Record<string, Player[]>);
+  const playersByPosition = Array.isArray(teamPlayers) 
+    ? teamPlayers.reduce((acc, player) => {
+        if (player && player.position) {
+          if (!acc[player.position]) {
+            acc[player.position] = [];
+          }
+          acc[player.position].push(player);
+        }
+        return acc;
+      }, {} as Record<string, Player[]>)
+    : {} as Record<string, Player[]>;
 
   // Get projection for a player
   const getProjectionForPlayer = (playerId: string) => {
-    return teamProjections.find(p => p.player_id === playerId);
+    if (!playerId || !Array.isArray(teamProjections)) return null;
+    return teamProjections.find(p => p && p.player_id === playerId);
   };
 
   // Calculate fantasy points by position
-  const fantasyPointsByPosition = Object.entries(playersByPosition).map(([position, players]) => {
-    const totalPoints = players.reduce((sum, player) => {
-      const projection = getProjectionForPlayer(player.player_id);
-      return sum + (projection?.half_ppr || 0);
-    }, 0);
+  const fantasyPointsByPosition = Object.entries(playersByPosition || {}).map(([position, players]) => {
+    const totalPoints = Array.isArray(players) 
+      ? players.reduce((sum, player) => {
+          if (!player || !player.player_id) return sum;
+          const projection = getProjectionForPlayer(player.player_id);
+          return sum + (projection?.half_ppr || 0);
+        }, 0)
+      : 0;
+    
+    const playerCount = Array.isArray(players) ? players.length : 0;
     
     return {
       position,
       totalPoints,
-      playerCount: players.length,
-      avgPoints: players.length > 0 ? totalPoints / players.length : 0
+      playerCount,
+      avgPoints: playerCount > 0 ? totalPoints / playerCount : 0
     };
   });
 
@@ -417,52 +443,57 @@ const TeamAdjuster: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {teamPlayers.sort((a, b) => {
-                      const projA = getProjectionForPlayer(a.player_id);
-                      const projB = getProjectionForPlayer(b.player_id);
-                      const ptsA = projA?.half_ppr || 0;
-                      const ptsB = projB?.half_ppr || 0;
-                      return ptsB - ptsA;
-                    }).map(player => {
-                      const proj = getProjectionForPlayer(player.player_id);
-                      if (!proj) return null;
+                    {Array.isArray(teamPlayers) ? teamPlayers
+                      .filter(player => player && player.player_id)
+                      .sort((a, b) => {
+                        const projA = getProjectionForPlayer(a.player_id);
+                        const projB = getProjectionForPlayer(b.player_id);
+                        const ptsA = projA?.half_ppr || 0;
+                        const ptsB = projB?.half_ppr || 0;
+                        return ptsB - ptsA;
+                      })
+                      .map(player => {
+                        if (!player || !player.player_id) return null;
+                        
+                        const proj = getProjectionForPlayer(player.player_id);
+                        if (!proj) return null;
 
-                      let keyStats = '';
-                      if (player.position === 'QB') {
-                        keyStats = `${proj.pass_yards?.toFixed(0) || 0} yds, ${proj.pass_td?.toFixed(1) || 0} TD`;
-                      } else if (player.position === 'RB') {
-                        keyStats = `${proj.rush_yards?.toFixed(0) || 0} rush, ${proj.receptions?.toFixed(0) || 0} rec`;
-                      } else {
-                        keyStats = `${proj.receptions?.toFixed(0) || 0} rec, ${proj.rec_yards?.toFixed(0) || 0} yds`;
-                      }
+                        let keyStats = '';
+                        if (player.position === 'QB') {
+                          keyStats = `${proj.pass_yards?.toFixed(0) || 0} yds, ${proj.pass_td?.toFixed(1) || 0} TD`;
+                        } else if (player.position === 'RB') {
+                          keyStats = `${proj.rush_yards?.toFixed(0) || 0} rush, ${proj.receptions?.toFixed(0) || 0} rec`;
+                        } else {
+                          keyStats = `${proj.receptions?.toFixed(0) || 0} rec, ${proj.rec_yards?.toFixed(0) || 0} yds`;
+                        }
 
-                      // Mocked change - in reality this would compare to pre-adjustment value
-                      const change = (Math.random() * 10 - 5).toFixed(1);
+                        // Mocked change - in reality this would compare to pre-adjustment value
+                        const change = (Math.random() * 10 - 5).toFixed(1);
 
-                      return (
-                        <TableRow key={player.player_id}>
-                          <TableCell className="font-medium">
-                            {player.name}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">
-                              {player.position}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {proj.half_ppr.toFixed(1)}
-                          </TableCell>
-                          <TableCell>
-                            <span className={Number(change) >= 0 ? "text-green-500" : "text-red-500"}>
-                              {Number(change) >= 0 ? "+" : ""}{change}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-sm">
-                            {keyStats}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                        return (
+                          <TableRow key={player.player_id}>
+                            <TableCell className="font-medium">
+                              {player.name || 'Unknown Player'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {player.position || 'N/A'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {(proj.half_ppr || 0).toFixed(1)}
+                            </TableCell>
+                            <TableCell>
+                              <span className={Number(change) >= 0 ? "text-green-500" : "text-red-500"}>
+                                {Number(change) >= 0 ? "+" : ""}{change}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {keyStats}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }) : null}
                   </TableBody>
                 </Table>
               </div>
@@ -561,23 +592,24 @@ const TeamAdjuster: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {teamPlayers
+                    {Array.isArray(teamPlayers) ? teamPlayers
+                      .filter(player => player && player.player_id)
                       .map(player => ({
                         player,
                         projection: getProjectionForPlayer(player.player_id)
                       }))
-                      .filter(item => item.projection)
+                      .filter(item => item.projection && item.player)
                       .sort((a, b) => (b.projection?.half_ppr || 0) - (a.projection?.half_ppr || 0))
                       .slice(0, 5)
                       .map(({ player, projection }) => (
                         <TableRow key={player.player_id}>
                           <TableCell className="font-medium">
-                            {player.name}
+                            {player.name || 'Unknown Player'}
                           </TableCell>
-                          <TableCell>{player.position}</TableCell>
-                          <TableCell>{projection?.half_ppr.toFixed(1)}</TableCell>
+                          <TableCell>{player.position || 'N/A'}</TableCell>
+                          <TableCell>{(projection?.half_ppr || 0).toFixed(1)}</TableCell>
                         </TableRow>
-                      ))}
+                      )) : null}
                   </TableBody>
                 </Table>
               </div>

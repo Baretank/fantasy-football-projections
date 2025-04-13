@@ -46,7 +46,7 @@ const ScenarioManager: React.FC = () => {
   const [newScenarioDescription, setNewScenarioDescription] = useState<string>('');
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
   const [selectedComparisonScenarioIds, setSelectedComparisonScenarioIds] = useState<string[]>([]);
-  const [selectedPosition, setSelectedPosition] = useState<string>('');
+  const [selectedPosition, setSelectedPosition] = useState<string>('all_positions');
   const [comparisonData, setComparisonData] = useState<ComparisonData[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,17 +62,23 @@ const ScenarioManager: React.FC = () => {
   const fetchScenarios = async () => {
     try {
       setIsLoading(true);
+      console.log("Fetching scenarios from API...");
       const data = await ScenarioService.getScenarios();
+      console.log("Scenarios fetched successfully:", data);
       setScenarios(data);
       
       // Set default selected scenario to the baseline
       const baseline = data.find(s => s.is_baseline);
       if (baseline) {
+        console.log("Found baseline scenario:", baseline.name);
         setSelectedScenarioId(baseline.scenario_id);
         setSelectedComparisonScenarioIds([baseline.scenario_id]);
       } else if (data.length > 0) {
+        console.log("No baseline found, using first scenario:", data[0].name);
         setSelectedScenarioId(data[0].scenario_id);
         setSelectedComparisonScenarioIds([data[0].scenario_id]);
+      } else {
+        console.log("No scenarios found in response");
       }
     } catch (err) {
       console.error('Error fetching scenarios:', err);
@@ -199,15 +205,31 @@ const ScenarioManager: React.FC = () => {
       setIsComparing(true);
       setIsLoading(true);
       
+      console.log("Sending scenario comparison request with:", {
+        scenarioIds: selectedComparisonScenarioIds,
+        position: selectedPosition !== 'all_positions' ? selectedPosition : undefined
+      });
+      
       const response = await ScenarioService.compareScenarios(
         selectedComparisonScenarioIds,
-        selectedPosition || undefined
+        selectedPosition !== 'all_positions' ? selectedPosition : undefined
       );
       
+      console.log("Received comparison response:", response);
+      
+      if (!response.players || !Array.isArray(response.players)) {
+        console.error("Invalid comparison response format:", response);
+        setError('Received invalid comparison data format');
+        setComparisonData([]);
+        return;
+      }
+      
       setComparisonData(response.players);
+      console.log(`Successfully loaded comparison data for ${response.players.length} players`);
     } catch (err) {
       console.error('Error comparing scenarios:', err);
-      setError('Failed to compare scenarios');
+      setError(`Failed to compare scenarios: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setComparisonData([]);
     } finally {
       setIsLoading(false);
       setIsComparing(true);
@@ -450,7 +472,7 @@ const ScenarioManager: React.FC = () => {
                         <SelectValue placeholder="All Positions" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All Positions</SelectItem>
+                        <SelectItem value="all_positions">All Positions</SelectItem>
                         <SelectItem value="QB">QB</SelectItem>
                         <SelectItem value="RB">RB</SelectItem>
                         <SelectItem value="WR">WR</SelectItem>

@@ -9,7 +9,8 @@ import {
   DraftBoard
 } from '@/types/index';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+// Using Vite proxy configuration from vite.config.ts
+const API_BASE_URL = '/api';
 
 // Helper function for API requests
 async function fetchApi(
@@ -17,40 +18,122 @@ async function fetchApi(
   method: string = 'GET', 
   body: any = null
 ): Promise<any> {
+  // Ensure endpoint starts with a slash
+  const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${API_BASE_URL}${normalizedEndpoint}`;
+  
   const options: RequestInit = {
     method,
     headers: {
       'Content-Type': 'application/json',
     },
+    // Add credentials for CORS requests
+    credentials: 'include',
   };
 
   if (body && (method === 'POST' || method === 'PUT')) {
     options.body = JSON.stringify(body);
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
-  
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.detail || 'An error occurred');
+  try {
+    console.log(`API Request: ${method} ${url}`);
+    if (body) console.log('Request body:', body);
+    
+    // Add debug info about the URL
+    console.log(`Full request URL: ${new URL(url, window.location.origin).href}`);
+    
+    const response = await fetch(url, options);
+    console.log(`Response status: ${response.status}, ok: ${response.ok}`);
+    
+    if (!response.ok) {
+      // Try to parse error response
+      try {
+        // Log the raw response text for debugging
+        const responseText = await response.text();
+        console.error(`Error response text:`, responseText);
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(responseText);
+        } catch (parseError) {
+          console.error(`Could not parse error response as JSON:`, parseError);
+          throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        }
+        
+        console.error(`API Error (${response.status}):`, errorData);
+        throw new Error(errorData.detail || `API Error: ${response.status} ${response.statusText}`);
+      } catch (e) {
+        // If error response isn't valid JSON or can't be read
+        console.error(`API Error (${response.status}): Could not parse response`, e);
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      }
+    }
+    
+    const responseText = await response.text();
+    console.log(`Raw response:`, responseText.substring(0, 100) + (responseText.length > 100 ? '...' : ''));
+    
+    // Parse as JSON if there's content, otherwise return empty object
+    const data = responseText ? JSON.parse(responseText) : {};
+    console.log(`API Response: ${method} ${normalizedEndpoint}`, data);
+    return data;
+  } catch (error) {
+    console.error(`API Request Failed: ${method} ${normalizedEndpoint}`, error);
+    // Rethrow the error for the caller to handle
+    throw error;
   }
-  
-  return response.json();
 }
 
 // Player services
 export const PlayerService = {
-  async getPlayers(position?: string, team?: string): Promise<Player[]> {
+  async getPlayers(position?: string, team?: string, status?: string): Promise<any> {
     let endpoint = '/players';
     const params = new URLSearchParams();
     
     if (position) params.append('position', position);
     if (team) params.append('team', team);
+    if (status) params.append('status', status);
+    
+    // Add pagination parameters for consistent response format
+    params.append('page', '1');
+    params.append('page_size', '100');
     
     const queryString = params.toString();
     if (queryString) endpoint += `?${queryString}`;
     
-    return fetchApi(endpoint);
+    console.log(`PlayerService.getPlayers: Fetching from ${endpoint}`);
+    try {
+      const response = await fetchApi(endpoint);
+      console.log(`PlayerService.getPlayers: Response structure:`, 
+        response && typeof response === 'object' 
+          ? Object.keys(response) 
+          : typeof response);
+      
+      // This API endpoint returns { players: [...], pagination: {...} }
+      return response;
+    } catch (error) {
+      console.error(`PlayerService.getPlayers error:`, error);
+      // Return empty response with players array to maintain expected structure
+      return { players: [], pagination: { total_count: 0, page: 1, total_pages: 1 } };
+    }
+  },
+  
+  async getRookies(position?: string, team?: string): Promise<Player[]> {
+    // Build the query parameters
+    const params = new URLSearchParams();
+    if (position && position !== 'all_positions') params.append('position', position);
+    if (team && team !== 'all_teams') params.append('team', team);
+    
+    // Simplify the endpoint construction
+    const queryString = params.toString();
+    const endpoint = `/players/rookies${queryString ? `?${queryString}` : ''}`;
+    
+    console.log(`Fetching rookies with endpoint: ${endpoint}`);
+    try {
+      return await fetchApi(endpoint);
+    } catch (error) {
+      console.error(`Error fetching rookies from ${endpoint}:`, error);
+      throw error;
+    }
   },
 
   async getPlayer(playerId: string): Promise<Player> {
@@ -62,6 +145,35 @@ export const PlayerService = {
     if (season) endpoint += `?season=${season}`;
     
     return fetchApi(endpoint);
+  },
+  
+  async getPlayersOverview(): Promise<Player[]> {
+    try {
+      // Using the existing getPlayers method, but extracting the players array
+      const response = await this.getPlayers();
+      
+      // Log the response for debugging
+      console.log("getPlayersOverview response:", response);
+      
+      // If the response has a players array, return that
+      if (response && typeof response === 'object' && Array.isArray(response.players)) {
+        console.log("Returning players array from response.players");
+        return response.players;
+      } 
+      
+      // If the response is already an array, return it
+      if (Array.isArray(response)) {
+        console.log("Response is already an array, returning directly");
+        return response;
+      }
+      
+      // Return empty array as fallback
+      console.log("Returning empty array as fallback");
+      return [];
+    } catch (error) {
+      console.error(`PlayerService.getPlayersOverview error:`, error);
+      return [];
+    }
   }
 };
 
@@ -69,21 +181,50 @@ export const PlayerService = {
 export const ProjectionService = {
   async getPlayerProjections(
     playerId: string, 
-    scenarioId?: string
+    scenarioId?: string,
+    season?: number
   ): Promise<Projection[]> {
-    let endpoint = `/projections/player/${playerId}`;
-    if (scenarioId) endpoint += `?scenario_id=${scenarioId}`;
+    if (!playerId) {
+      console.error("getPlayerProjections called with empty playerId");
+      return [];
+    }
     
-    return fetchApi(endpoint);
+    let endpoint = `/projections`;
+    const params = new URLSearchParams();
+    
+    if (playerId) params.append('player_id', playerId);
+    if (scenarioId) params.append('scenario_id', scenarioId);
+    if (season) params.append('season', season.toString());
+    
+    const queryString = params.toString();
+    if (queryString) endpoint += `?${queryString}`;
+    
+    console.log(`ProjectionService: Requesting projections for player ${playerId}${scenarioId ? ` in scenario ${scenarioId}` : ''}`);
+    const result = await fetchApi(endpoint);
+    console.log(`ProjectionService: Received ${Array.isArray(result) ? result.length : 0} projections for player ${playerId}`);
+    
+    // Return empty array if result is not an array
+    if (!Array.isArray(result)) {
+      console.error(`Unexpected response format for projections, expected array but got:`, typeof result);
+      return [];
+    }
+    
+    return result;
   },
 
   async createBaseProjection(
     playerId: string, 
-    season: number
+    season: number,
+    scenarioId?: string
   ): Promise<Projection> {
     return fetchApi(
-      `/projections/player/${playerId}/base?season=${season}`, 
-      'POST'
+      `/projections/create`, 
+      'POST',
+      {
+        player_id: playerId,
+        season: season,
+        scenario_id: scenarioId
+      }
     );
   },
 
@@ -92,8 +233,8 @@ export const ProjectionService = {
     adjustments: Record<string, number>
   ): Promise<Projection> {
     return fetchApi(
-      `/projections/${projectionId}`, 
-      'PUT', 
+      `/projections/${projectionId}/adjust`, 
+      'POST', 
       { adjustments }
     );
   },
@@ -101,24 +242,117 @@ export const ProjectionService = {
   async applyTeamAdjustments(
     team: string, 
     season: number, 
-    adjustments: Record<string, number>
+    adjustments: Record<string, number>,
+    scenarioId?: string,
+    playerShares?: Record<string, Record<string, number>>
+  ): Promise<any> {
+    let endpoint = `/projections/team/${team}/adjust?season=${season}`;
+    if (scenarioId) endpoint += `&scenario_id=${scenarioId}`;
+    
+    return fetchApi(
+      endpoint, 
+      'PUT', 
+      { 
+        adjustments,
+        player_shares: playerShares
+      }
+    );
+  },
+  
+  async getProjectionRange(
+    projectionId: string,
+    confidence: number = 0.80,
+    createScenarios: boolean = false
   ): Promise<any> {
     return fetchApi(
-      `/projections/team/${team}/adjustments?season=${season}`, 
-      'PUT', 
-      { adjustments }
+      `/projections/${projectionId}/range?confidence=${confidence}&create_scenarios=${createScenarios}`
     );
+  },
+  
+  async getProjectionVariance(
+    projectionId: string,
+    useHistorical: boolean = true
+  ): Promise<any> {
+    return fetchApi(
+      `/projections/${projectionId}/variance?use_historical=${useHistorical}`
+    );
+  },
+  
+  async getTeamStats(
+    team: string,
+    season: number
+  ): Promise<any> {
+    return fetchApi(
+      `/projections/team/${team}/stats?season=${season}`
+    );
+  },
+  
+  async getTeamUsage(
+    team: string,
+    season: number
+  ): Promise<any> {
+    return fetchApi(
+      `/projections/team/${team}/usage?season=${season}`
+    );
+  },
+  
+  async createRookieProjections(
+    season: number,
+    scenarioId?: string
+  ): Promise<any> {
+    let endpoint = `/projections/rookies/create?season=${season}`;
+    if (scenarioId) endpoint += `&scenario_id=${scenarioId}`;
+    
+    return fetchApi(endpoint, 'POST');
+  },
+  
+  async enhanceRookieProjection(
+    playerId: string,
+    season: number,
+    compLevel: string = 'medium',
+    playingTimePct: number = 0.5
+  ): Promise<any> {
+    return fetchApi(
+      `/projections/rookies/${playerId}/enhance?comp_level=${compLevel}&playing_time_pct=${playingTimePct}&season=${season}`,
+      'PUT'
+    );
+  },
+  
+  async createDraftBasedRookieProjection(
+    playerId: string,
+    draftPosition: number,
+    season: number,
+    scenarioId?: string
+  ): Promise<any> {
+    let endpoint = `/projections/rookies/draft-based?player_id=${playerId}&draft_position=${draftPosition}&season=${season}`;
+    if (scenarioId) endpoint += `&scenario_id=${scenarioId}`;
+    
+    return fetchApi(endpoint, 'POST');
   }
 };
 
 // Scenario services
 export const ScenarioService = {
   async getScenarios(): Promise<Scenario[]> {
-    return fetchApi('/scenarios');
+    try {
+      console.log("ScenarioService: Requesting scenarios from /scenarios");
+      const result = await fetchApi('/scenarios');
+      console.log("ScenarioService: Received response:", result);
+      return result;
+    } catch (error) {
+      console.error("ScenarioService.getScenarios error:", error);
+      throw error;
+    }
   },
 
   async getScenario(scenarioId: string): Promise<Scenario> {
-    return fetchApi(`/scenarios/${scenarioId}`);
+    try {
+      console.log(`ScenarioService: Requesting scenario ${scenarioId}`);
+      return fetchApi(`/scenarios/${scenarioId}`);
+    } catch (error) {
+      console.error("ScenarioService.getScenario error:", error);
+      throw error;
+    }
   },
 
   async createScenario(
@@ -126,11 +360,17 @@ export const ScenarioService = {
     description?: string, 
     isBaseline: boolean = false
   ): Promise<Scenario> {
-    return fetchApi(
-      '/scenarios', 
-      'POST', 
-      { name, description, is_baseline: isBaseline }
-    );
+    try {
+      console.log(`ScenarioService: Creating scenario "${name}"`);
+      return fetchApi(
+        '/scenarios', 
+        'POST', 
+        { name, description, is_baseline: isBaseline }
+      );
+    } catch (error) {
+      console.error("ScenarioService.createScenario error:", error);
+      throw error;
+    }
   },
 
   async getScenarioProjections(
@@ -138,16 +378,36 @@ export const ScenarioService = {
     position?: string, 
     team?: string
   ): Promise<Projection[]> {
-    let endpoint = `/scenarios/${scenarioId}/projections`;
-    const params = new URLSearchParams();
-    
-    if (position) params.append('position', position);
-    if (team) params.append('team', team);
-    
-    const queryString = params.toString();
-    if (queryString) endpoint += `?${queryString}`;
-    
-    return fetchApi(endpoint);
+    try {
+      if (!scenarioId) {
+        console.error("getScenarioProjections called with empty scenarioId");
+        return [];
+      }
+      
+      let endpoint = `/scenarios/${scenarioId}/projections`;
+      const params = new URLSearchParams();
+      
+      if (position) params.append('position', position);
+      if (team) params.append('team', team);
+      
+      const queryString = params.toString();
+      if (queryString) endpoint += `?${queryString}`;
+      
+      console.log(`ScenarioService: Requesting projections for scenario ${scenarioId} with position=${position || 'all'}`);
+      const result = await fetchApi(endpoint);
+      console.log(`ScenarioService: Received ${Array.isArray(result) ? result.length : 0} projections for scenario ${scenarioId}, position=${position || 'all'}`);
+      
+      // Return empty array if result is not an array
+      if (!Array.isArray(result)) {
+        console.error(`Unexpected response format for projections, expected array but got:`, typeof result);
+        return [];
+      }
+      
+      return result;
+    } catch (error) {
+      console.error("ScenarioService.getScenarioProjections error:", error);
+      throw error;
+    }
   },
 
   async cloneScenario(
@@ -155,26 +415,44 @@ export const ScenarioService = {
     name: string, 
     description?: string
   ): Promise<Scenario> {
-    return fetchApi(
-      `/scenarios/${scenarioId}/clone?name=${encodeURIComponent(name)}` + 
-      (description ? `&description=${encodeURIComponent(description)}` : ''), 
-      'POST'
-    );
+    try {
+      console.log(`ScenarioService: Cloning scenario ${scenarioId} as "${name}"`);
+      return fetchApi(
+        `/scenarios/${scenarioId}/clone?name=${encodeURIComponent(name)}` + 
+        (description ? `&description=${encodeURIComponent(description)}` : ''), 
+        'POST'
+      );
+    } catch (error) {
+      console.error("ScenarioService.cloneScenario error:", error);
+      throw error;
+    }
   },
 
   async deleteScenario(scenarioId: string): Promise<void> {
-    return fetchApi(`/scenarios/${scenarioId}`, 'DELETE');
+    try {
+      console.log(`ScenarioService: Deleting scenario ${scenarioId}`);
+      return fetchApi(`/scenarios/${scenarioId}`, 'DELETE');
+    } catch (error) {
+      console.error("ScenarioService.deleteScenario error:", error);
+      throw error;
+    }
   },
 
   async compareScenarios(
     scenarioIds: string[], 
     position?: string
   ): Promise<any> {
-    return fetchApi(
-      '/scenarios/compare', 
-      'POST', 
-      { scenario_ids: scenarioIds, position }
-    );
+    try {
+      console.log(`ScenarioService: Comparing scenarios`, scenarioIds);
+      return fetchApi(
+        '/scenarios/compare', 
+        'POST', 
+        { scenario_ids: scenarioIds, position }
+      );
+    } catch (error) {
+      console.error("ScenarioService.compareScenarios error:", error);
+      throw error;
+    }
   }
 };
 
@@ -241,7 +519,7 @@ export const DraftService = {
     limit: number = 100,
     offset: number = 0
   ): Promise<any> {
-    let endpoint = '/draft-board';
+    let endpoint = '/draft/draft-board';
     const params = new URLSearchParams();
     
     if (status) params.append('status', status);
@@ -261,7 +539,7 @@ export const DraftService = {
     update: DraftStatusUpdate
   ): Promise<any> {
     return fetchApi(
-      '/draft-status', 
+      '/draft/draft-status', 
       'POST', 
       update
     );
@@ -271,41 +549,64 @@ export const DraftService = {
     updates: DraftStatusUpdate[]
   ): Promise<any> {
     return fetchApi(
-      '/batch-draft-status', 
+      '/draft/batch-draft-status', 
       'POST', 
       { updates }
     );
   },
 
   async resetDraft(): Promise<any> {
-    return fetchApi('/reset-draft', 'POST');
+    return fetchApi('/draft/reset-draft', 'POST');
   },
 
   async undoLastDraftPick(): Promise<any> {
-    return fetchApi('/undo-draft', 'POST');
+    return fetchApi('/draft/undo-draft', 'POST');
   },
 
   async getDraftProgress(): Promise<any> {
-    return fetchApi('/draft-progress');
+    return fetchApi('/draft/draft-progress');
   },
 
   async createDraftBoard(board: DraftBoard): Promise<any> {
-    return fetchApi('/draft-boards', 'POST', board);
+    return fetchApi('/draft/draft-boards', 'POST', board);
   },
 
   async getDraftBoards(activeOnly: boolean = true): Promise<any> {
-    return fetchApi(`/draft-boards?active_only=${activeOnly}`);
+    return fetchApi(`/draft/draft-boards?active_only=${activeOnly}`);
   },
 
   async getRookieProjectionTemplate(
     position: string, 
     draftRound?: number
   ): Promise<any> {
-    let endpoint = `/rookie-projection-template/${position}`;
+    let endpoint = `/draft/rookie-projection-template/${position}`;
     if (draftRound) endpoint += `?draft_round=${draftRound}`;
     
     return fetchApi(endpoint);
   },
+  
+  async updateRookieDraftStatus(
+    playerId: string,
+    team: string,
+    draftPosition: number,
+    round?: number,
+    pick?: number,
+    autoProject: boolean = true
+  ): Promise<any> {
+    // This uses the /api/players/rookies/{player_id}/draft endpoint
+    // which is defined in the players_router, not the draft_router
+    return fetchApi(
+      `/players/rookies/${playerId}/draft`,
+      'PUT',
+      {
+        team,
+        draft_position: draftPosition,
+        round,
+        pick,
+        auto_project: autoProject
+      }
+    );
+  }
 };
 
 // Export all services

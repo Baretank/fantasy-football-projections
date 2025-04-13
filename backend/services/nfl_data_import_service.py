@@ -205,6 +205,13 @@ class NFLDataImportService:
                 self.logger.info(f"Test mode: limiting import to {limit} players")
                 player_data = player_data.head(limit)
             
+            # Extra filter to ensure only fantasy-relevant positions (double-check)
+            fantasy_positions = ["QB", "RB", "WR", "TE"]
+            original_count = len(player_data)
+            player_data = player_data[player_data['position'].isin(fantasy_positions)]
+            if original_count != len(player_data):
+                self.logger.info(f"Additional filtering: removed {original_count - len(player_data)} non-fantasy players")
+            
             # Process and transform data
             players_added = 0
             players_updated = 0
@@ -335,16 +342,27 @@ class NFLDataImportService:
             stats_added = 0
             errors = 0
             
-            # If player_limit is specified, get only limited players
+            # Always filter for fantasy-relevant players
+            fantasy_positions = ["QB", "RB", "WR", "TE"]
+            players = self.db.query(Player).filter(
+                Player.position.in_(fantasy_positions)
+            )
+            
+            # If player_limit is specified, add the limit
             if player_limit:
-                self.logger.info(f"Limiting weekly stats import to {player_limit} players")
-                players = self.db.query(Player).filter(
-                    Player.position.in_(["QB", "RB", "WR", "TE"])
-                ).limit(player_limit).all()
-                player_ids = [p.player_id for p in players]
-                self.logger.info(f"Selected {len(player_ids)} players for limited import")
-                # Filter weekly_data to only include these players
-                weekly_data = weekly_data[weekly_data['player_id'].isin(player_ids)]
+                self.logger.info(f"Limiting weekly stats import to {player_limit} fantasy-relevant players")
+                players = players.limit(player_limit)
+            else:
+                self.logger.info(f"Filtering weekly stats import to fantasy-relevant positions only")
+                
+            players = players.all()
+            player_ids = [p.player_id for p in players]
+            self.logger.info(f"Selected {len(player_ids)} players for import")
+            
+            # Filter weekly_data to only include these players
+            original_count = len(weekly_data)
+            weekly_data = weekly_data[weekly_data['player_id'].isin(player_ids)]
+            self.logger.info(f"Filtered weekly stats from {original_count} to {len(weekly_data)} entries for fantasy-relevant players")
             
             for _, row in weekly_data.iterrows():
                 # Skip rows with missing player_id
