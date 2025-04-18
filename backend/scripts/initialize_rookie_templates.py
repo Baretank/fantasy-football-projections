@@ -12,10 +12,10 @@ import uuid
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 def initialize_rookie_templates():
     """Initialize default rookie projection templates by position and draft position."""
@@ -26,7 +26,7 @@ def initialize_rookie_templates():
         if existing > 0:
             logger.info(f"Found {existing} existing templates. Skipping initialization.")
             return
-        
+
         # Create QB templates
         qb_templates = [
             # Top QB (picks 1-10)
@@ -45,7 +45,7 @@ def initialize_rookie_templates():
                 int_rate=0.03,
                 rush_att_per_game=4.0,
                 rush_yards_per_att=5.0,
-                rush_td_per_game=0.2
+                rush_td_per_game=0.2,
             ),
             # Round 1 QB (picks 11-32)
             RookieProjectionTemplate(
@@ -63,7 +63,7 @@ def initialize_rookie_templates():
                 int_rate=0.035,
                 rush_att_per_game=3.5,
                 rush_yards_per_att=4.5,
-                rush_td_per_game=0.15
+                rush_td_per_game=0.15,
             ),
             # Round 2-3 QB (picks 33-105)
             RookieProjectionTemplate(
@@ -81,7 +81,7 @@ def initialize_rookie_templates():
                 int_rate=0.04,
                 rush_att_per_game=2.5,
                 rush_yards_per_att=4.0,
-                rush_td_per_game=0.1
+                rush_td_per_game=0.1,
             ),
             # Day 3 QB (picks 106-262)
             RookieProjectionTemplate(
@@ -99,10 +99,10 @@ def initialize_rookie_templates():
                 int_rate=0.045,
                 rush_att_per_game=1.5,
                 rush_yards_per_att=3.5,
-                rush_td_per_game=0.05
-            )
+                rush_td_per_game=0.05,
+            ),
         ]
-        
+
         # Create RB templates
         rb_templates = [
             # Top RB (picks 1-32)
@@ -120,7 +120,7 @@ def initialize_rookie_templates():
                 targets_per_game=3.5,
                 catch_rate=0.75,
                 rec_yards_per_catch=8.0,
-                rec_td_per_catch=0.04
+                rec_td_per_catch=0.04,
             ),
             # Round 2 RB (picks 33-64)
             RookieProjectionTemplate(
@@ -137,7 +137,7 @@ def initialize_rookie_templates():
                 targets_per_game=3.0,
                 catch_rate=0.70,
                 rec_yards_per_catch=7.5,
-                rec_td_per_catch=0.03
+                rec_td_per_catch=0.03,
             ),
             # Round 3-4 RB (picks 65-140)
             RookieProjectionTemplate(
@@ -154,7 +154,7 @@ def initialize_rookie_templates():
                 targets_per_game=2.0,
                 catch_rate=0.65,
                 rec_yards_per_catch=7.0,
-                rec_td_per_catch=0.02
+                rec_td_per_catch=0.02,
             ),
             # Late RB (picks 141-262)
             RookieProjectionTemplate(
@@ -171,10 +171,10 @@ def initialize_rookie_templates():
                 targets_per_game=1.0,
                 catch_rate=0.60,
                 rec_yards_per_catch=6.5,
-                rec_td_per_catch=0.01
-            )
+                rec_td_per_catch=0.01,
+            ),
         ]
-        
+
         # Create WR templates
         wr_templates = [
             # Top WR (picks 1-15)
@@ -192,7 +192,7 @@ def initialize_rookie_templates():
                 rec_td_per_catch=0.07,
                 rush_att_per_game=0.5,
                 rush_yards_per_att=8.0,
-                rush_td_per_att=0.03
+                rush_td_per_att=0.03,
             ),
             # Round 1 WR (picks 16-32)
             RookieProjectionTemplate(
@@ -209,7 +209,7 @@ def initialize_rookie_templates():
                 rec_td_per_catch=0.06,
                 rush_att_per_game=0.4,
                 rush_yards_per_att=7.5,
-                rush_td_per_att=0.025
+                rush_td_per_att=0.025,
             ),
             # Round 2 WR (picks 33-64)
             RookieProjectionTemplate(
@@ -226,7 +226,7 @@ def initialize_rookie_templates():
                 rec_td_per_catch=0.05,
                 rush_att_per_game=0.3,
                 rush_yards_per_att=7.0,
-                rush_td_per_att=0.02
+                rush_td_per_att=0.02,
             ),
             # Round 3-4 WR (picks 65-140)
             RookieProjectionTemplate(
@@ -243,7 +243,7 @@ def initialize_rookie_templates():
                 rec_td_per_catch=0.04,
                 rush_att_per_game=0.2,
                 rush_yards_per_att=6.0,
-                rush_td_per_att=0.01
+                rush_td_per_att=0.01,
             ),
             # Late WR (picks 141-262)
             RookieProjectionTemplate(
@@ -260,10 +260,10 @@ def initialize_rookie_templates():
                 rec_td_per_catch=0.03,
                 rush_att_per_game=0.1,
                 rush_yards_per_att=5.0,
-                rush_td_per_att=0.005
-            )
+                rush_td_per_att=0.005,
+            ),
         ]
-        
+
         # Create TE templates
         te_templates = [
             # Top TE (picks 1-32)
@@ -281,7 +281,7 @@ def initialize_rookie_templates():
                 rec_td_per_catch=0.08,
                 rush_att_per_game=0.0,
                 rush_yards_per_att=0.0,
-                rush_td_per_att=0.0
+                rush_td_per_att=0.0,
             ),
             # Round 2-3 TE (picks 33-105)
             RookieProjectionTemplate(
@@ -298,7 +298,7 @@ def initialize_rookie_templates():
                 rec_td_per_catch=0.06,
                 rush_att_per_game=0.0,
                 rush_yards_per_att=0.0,
-                rush_td_per_att=0.0
+                rush_td_per_att=0.0,
             ),
             # Late TE (picks 106-262)
             RookieProjectionTemplate(
@@ -315,22 +315,25 @@ def initialize_rookie_templates():
                 rec_td_per_catch=0.04,
                 rush_att_per_game=0.0,
                 rush_yards_per_att=0.0,
-                rush_td_per_att=0.0
-            )
+                rush_td_per_att=0.0,
+            ),
         ]
-        
+
         # Add all templates to database
         for template in qb_templates + rb_templates + wr_templates + te_templates:
             db.add(template)
-            
+
         db.commit()
-        logger.info(f"Successfully initialized {len(qb_templates) + len(rb_templates) + len(wr_templates) + len(te_templates)} rookie templates")
-        
+        logger.info(
+            f"Successfully initialized {len(qb_templates) + len(rb_templates) + len(wr_templates) + len(te_templates)} rookie templates"
+        )
+
     except Exception as e:
         logger.error(f"Error initializing rookie templates: {str(e)}")
         db.rollback()
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     logger.info("Initializing rookie projection templates")

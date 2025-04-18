@@ -41,6 +41,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Logger } from '@/utils/logger';
 
 import { 
   PlayerService, 
@@ -115,12 +116,12 @@ const ProjectionAdjuster: React.FC = () => {
           setPlayers(response);
         } else {
           // Initialize as empty array if response format is unexpected
-          console.error('Unexpected API response format:', response);
+          Logger.error('Unexpected API response format:', response);
           setPlayers([]);
         }
       } catch (err) {
         setError('Failed to fetch players');
-        console.error(err);
+        Logger.error('Failed to fetch players', err);
       } finally {
         setIsLoading(false);
       }
@@ -141,7 +142,7 @@ const ProjectionAdjuster: React.FC = () => {
         }
       } catch (err) {
         setError('Failed to fetch scenarios');
-        console.error(err);
+        Logger.error('Failed to fetch scenarios', err);
       } finally {
         setIsLoading(false);
       }
@@ -197,11 +198,11 @@ const ProjectionAdjuster: React.FC = () => {
               if (Array.isArray(projectionOverrides)) {
                 setOverrides(projectionOverrides);
               } else {
-                console.error('Expected array of overrides but got:', projectionOverrides);
+                Logger.error('Expected array of overrides but got:', projectionOverrides);
                 setOverrides([]);
               }
             } catch (overrideErr) {
-              console.error('Error fetching overrides:', overrideErr);
+              Logger.error('Error fetching overrides:', overrideErr);
               setOverrides([]);
             }
           } else {
@@ -228,7 +229,7 @@ const ProjectionAdjuster: React.FC = () => {
         }
       } catch (err) {
         setError('Failed to fetch player projections');
-        console.error(err);
+        Logger.error('Failed to fetch player projections', err);
       } finally {
         setIsLoading(false);
       }
@@ -312,7 +313,7 @@ const ProjectionAdjuster: React.FC = () => {
         setRangeChartData(chartData);
       }
     } catch (error) {
-      console.error("Error fetching variance data:", error);
+      Logger.error("Error fetching variance data:", error);
       setError('Failed to load projection variance data');
     } finally {
       setIsLoading(false);
@@ -381,7 +382,7 @@ const ProjectionAdjuster: React.FC = () => {
         setOverrides(projectionOverrides);
       } catch (err) {
         setError('Failed to update projection');
-        console.error(err);
+        Logger.error('Failed to update projection', err);
       } finally {
         setIsLoading(false);
       }
@@ -421,7 +422,7 @@ const ProjectionAdjuster: React.FC = () => {
       setOverrides(projectionOverrides);
     } catch (err) {
       setError('Failed to create override');
-      console.error(err);
+      Logger.error('Failed to create override', err);
     } finally {
       setIsLoading(false);
     }
@@ -456,7 +457,7 @@ const ProjectionAdjuster: React.FC = () => {
       }
     } catch (err) {
       setError('Failed to remove override');
-      console.error(err);
+      Logger.error('Failed to remove override', err);
     } finally {
       setIsLoading(false);
     }
@@ -467,7 +468,7 @@ const ProjectionAdjuster: React.FC = () => {
     ? players.filter(player => {
         // Make sure player is a valid object with required properties
         if (!player || typeof player !== 'object' || !player.name || !player.position || !player.team) {
-          console.warn('Invalid player object:', player);
+          Logger.warn('Invalid player object:', player);
           return false;
         }
         
@@ -598,7 +599,7 @@ const ProjectionAdjuster: React.FC = () => {
           })
       ];
     } catch (error) {
-      console.error("Error generating range chart data:", error);
+      Logger.error("Error generating range chart data:", error);
       return [];
     }
   };

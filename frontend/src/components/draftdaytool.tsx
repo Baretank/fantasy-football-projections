@@ -27,6 +27,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { formatHeight, calculateAge } from '@/lib/utils';
 import { DraftService, PlayerService } from '@/services/api';
 import { DraftStatusUpdate } from '@/types/index';
+import { Logger } from '@/utils/logger';
 
 // Define interfaces
 interface Player {
@@ -82,7 +83,7 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
   const fetchRookies = async () => {
     setLoading(true);
     try {
-      console.log("Fetching rookies with filter:", positionFilter);
+      Logger.info("Fetching rookies with filter:", positionFilter);
       
       // Create retry and fallback chain
       let rookieData = [];
@@ -92,9 +93,9 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
         // Method 1: Try to get rookies from /players/rookies endpoint
         const position = positionFilter !== 'all_positions' ? positionFilter : undefined; 
         rookieData = await PlayerService.getRookies(position);
-        console.log("Got rookies from /players/rookies endpoint:", rookieData);
+        Logger.info("Got rookies from /players/rookies endpoint:", rookieData);
       } catch (error1) {
-        console.error("Failed to fetch from /players/rookies endpoint:", error1);
+        Logger.error("Failed to fetch from /players/rookies endpoint:", error1);
         usedFallback = true;
         
         try {
@@ -104,14 +105,14 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
             undefined,
             'Rookie'
           );
-          console.log("Got rookies using status filter:", rookieData);
+          Logger.info("Got rookies using status filter:", rookieData);
         } catch (error2) {
-          console.error("Failed to fetch with status filter:", error2);
+          Logger.error("Failed to fetch with status filter:", error2);
           
           try {
             // Method 3: Get all players and filter client-side
             const allPlayers = await PlayerService.getPlayers();
-            console.log("Got all players:", allPlayers);
+            Logger.info("Got all players:", allPlayers);
             
             // Filter to rookies only
             rookieData = allPlayers.filter(player => 
@@ -119,12 +120,12 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
               player.is_rookie || 
               (player.depth_chart_position === 'Reserve' && player.draft_round)
             );
-            console.log("Filtered to rookies client-side:", rookieData);
+            Logger.info("Filtered to rookies client-side:", rookieData);
           } catch (error3) {
-            console.error("Failed to fetch all players:", error3);
+            Logger.error("Failed to fetch all players:", error3);
             
             // Method 4: Last resort - use dummy data
-            console.log("Using dummy data as last resort");
+            Logger.info("Using dummy data as last resort");
             rookieData = [
               {
                 player_id: "1",
@@ -174,7 +175,7 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
         });
       }
     } catch (error) {
-      console.error('Error fetching rookies:', error);
+      Logger.error('Error fetching rookies:', error);
       toast({
         title: 'Error',
         description: 'Failed to load rookies: ' + (error instanceof Error ? error.message : String(error)),
@@ -268,7 +269,7 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
       const defaultDraftPosition = calculateOverallPosition(draftRound, draftPick);
       const draftPosition = rookie.draft_position || defaultDraftPosition;
       
-      console.log(`Saving rookie draft info for ${rookie.name}:`, {
+      Logger.info(`Saving rookie draft info for ${rookie.name}:`, {
         playerId,
         team: rookie.team || 'FA',
         draftPosition,
@@ -287,7 +288,7 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
           true // auto-project
         );
         
-        console.log("Rookie draft update result:", result);
+        Logger.info("Rookie draft update result:", result);
         
         // Successfully updated
         toast({
@@ -303,7 +304,7 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
           });
         }
       } catch (apiError) {
-        console.error('API error in saveRookieDraft:', apiError);
+        Logger.error('API error in saveRookieDraft:', apiError);
         
         // Simulate success for demo purposes
         toast({
@@ -345,7 +346,7 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
       });
       
     } catch (error) {
-      console.error('Error in saveRookieDraft:', error);
+      Logger.error('Error in saveRookieDraft:', error);
       toast({
         title: 'Error',
         description: 'Failed to save draft information: ' + (error instanceof Error ? error.message : String(error)),
@@ -380,12 +381,12 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
         };
       });
       
-      console.log("Batch updating rookies:", draftStatusUpdates);
+      Logger.info("Batch updating rookies:", draftStatusUpdates);
       
       try {
         // Attempt API call
         const response = await DraftService.batchUpdateDraftStatus(draftStatusUpdates);
-        console.log("Batch update response:", response);
+        Logger.info("Batch update response:", response);
         
         // Successfully updated
         toast({
@@ -393,7 +394,7 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
           description: `Updated ${draftStatusUpdates.length} rookies`,
         });
       } catch (apiError) {
-        console.error('API error in batch update:', apiError);
+        Logger.error('API error in batch update:', apiError);
         
         // Simulate success and update locally
         toast({
@@ -424,7 +425,7 @@ const DraftDayTool: React.FC<DraftDayToolProps> = () => {
       setDirtyRookies({});
       
     } catch (error) {
-      console.error('Error in batch update:', error);
+      Logger.error('Error in batch update:', error);
       toast({
         title: 'Error',
         description: 'Failed to save batch updates: ' + (error instanceof Error ? error.message : String(error)),

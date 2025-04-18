@@ -9,7 +9,12 @@ from pathlib import Path
 # Add the parent directory to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from backend.api.routes import players_router, projections_router, overrides_router, scenarios_router
+from backend.api.routes import (
+    players_router,
+    projections_router,
+    overrides_router,
+    scenarios_router,
+)
 from backend.api.routes.batch import router as batch_router
 from backend.api.routes.draft import router as draft_router
 from backend.api.routes.performance import router as performance_router
@@ -20,10 +25,10 @@ from pathlib import Path
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 # Define the lifespan context manager
 @asynccontextmanager
@@ -35,25 +40,27 @@ async def lifespan(app: FastAPI):
         # Verify database connection
         Base.metadata.create_all(bind=engine)
         logger.info("Database connection verified")
-        
+
         # Ensure rookies.json exists
         rookie_file = Path("data") / "rookies.json"
         if not rookie_file.exists():
             logger.warning("rookies.json not found in data directory")
-        
+
         # Initialize cache service
         from backend.services.cache_service import get_cache
+
         cache = get_cache(ttl_seconds=300)  # 5 minute default TTL
         logger.info(f"Cache service initialized")
-            
+
     except Exception as e:
         logger.error(f"Failed to initialize application: {str(e)}")
         raise
-    
+
     yield  # App runs here
-    
+
     # Shutdown
     logger.info("Shutting down Fantasy Football Projections API")
+
 
 # Create the FastAPI app with lifespan manager
 app = FastAPI(
@@ -76,13 +83,19 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:5173", "http://127.0.0.1:3000"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -104,15 +117,14 @@ data_dir.mkdir(exist_ok=True)
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "version": app.version,
-        "environment": "development"
-    }
+    return {"status": "healthy", "version": app.version, "environment": "development"}
+
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="localhost", port=8000)

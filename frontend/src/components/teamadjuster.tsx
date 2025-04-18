@@ -20,6 +20,7 @@ import {
   LineChart,
   Line
 } from 'recharts';
+import { Logger } from '@/utils/logger';
 
 import { ProjectionService, PlayerService } from '@/services/api';
 import { Player, Projection } from '@/types/index';
@@ -63,7 +64,7 @@ const TeamAdjuster: React.FC = () => {
         ];
         setTeams(nflTeams);
       } catch (err) {
-        console.error('Error fetching teams:', err);
+        Logger.error('Error fetching teams:', err);
         setError('Failed to load teams');
       } finally {
         setIsLoading(false);
@@ -120,7 +121,7 @@ const TeamAdjuster: React.FC = () => {
         setTeamProjections(projections);
 
       } catch (err) {
-        console.error(`Error fetching data for team ${selectedTeam}:`, err);
+        Logger.error(`Error fetching data for team ${selectedTeam}:`, err);
         setError(`Failed to load data for ${selectedTeam}`);
       } finally {
         setIsLoading(false);
@@ -191,7 +192,7 @@ const TeamAdjuster: React.FC = () => {
       setTeamProjections(projections);
 
     } catch (err) {
-      console.error('Error applying team adjustments:', err);
+      Logger.error('Error applying team adjustments:', err);
       setError('Failed to apply team adjustments');
     } finally {
       setApplyingChanges(false);

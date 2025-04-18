@@ -14,7 +14,10 @@
 - **Frontend**: `cd frontend && npm run dev`
 - **Tests**: `cd backend && python -m pytest tests/`
 - **Single Test**: `cd backend && python -m pytest "tests/path/to/test_file.py::TestClass::test_method" -v`  # Note the quotation marks
-- **Lint (Frontend)**: `npm run lint`
+- **Lint (Frontend)**: `cd frontend && npm run lint`
+- **Lint (Backend)**: `cd backend && flake8`
+- **Format (Backend)**: `cd backend && black .`
+- **Type Check (Backend)**: `cd backend && mypy .`
 - **Build (Frontend)**: `npm run build`
 
 ## Environment

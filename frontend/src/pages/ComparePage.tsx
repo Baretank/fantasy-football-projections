@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Logger } from '@/utils/logger';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -54,7 +55,7 @@ const ComparePage: React.FC = () => {
           setSelectedScenario(data[0].scenario_id);
         }
       } catch (err) {
-        console.error("Error fetching scenarios:", err);
+        Logger.error("Error fetching scenarios:", err);
       }
     }
     
@@ -103,7 +104,7 @@ const ComparePage: React.FC = () => {
         
         setPlayerData({ ...playerData, ...newPlayerData });
       } catch (err) {
-        console.error("Error fetching player data:", err);
+        Logger.error("Error fetching player data:", err);
         setError("Failed to load player data. Please try again.");
       } finally {
         setIsLoading(false);

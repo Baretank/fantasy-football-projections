@@ -28,6 +28,7 @@ import {
   LineChart,
   Line
 } from 'recharts';
+import { Logger } from '@/utils/logger';
 
 import { ScenarioService, PlayerService } from '@/services/api';
 import { Player, Projection, Scenario, COMPARISON_STATS } from '@/types/index';
@@ -62,26 +63,26 @@ const ScenarioManager: React.FC = () => {
   const fetchScenarios = async () => {
     try {
       setIsLoading(true);
-      console.log("Fetching scenarios from API...");
+      Logger.info("Fetching scenarios from API...");
       const data = await ScenarioService.getScenarios();
-      console.log("Scenarios fetched successfully:", data);
+      Logger.debug("Scenarios fetched successfully:", data);
       setScenarios(data);
       
       // Set default selected scenario to the baseline
       const baseline = data.find(s => s.is_baseline);
       if (baseline) {
-        console.log("Found baseline scenario:", baseline.name);
+        Logger.debug("Found baseline scenario:", baseline.name);
         setSelectedScenarioId(baseline.scenario_id);
         setSelectedComparisonScenarioIds([baseline.scenario_id]);
       } else if (data.length > 0) {
-        console.log("No baseline found, using first scenario:", data[0].name);
+        Logger.debug("No baseline found, using first scenario:", data[0].name);
         setSelectedScenarioId(data[0].scenario_id);
         setSelectedComparisonScenarioIds([data[0].scenario_id]);
       } else {
-        console.log("No scenarios found in response");
+        Logger.warn("No scenarios found in response");
       }
     } catch (err) {
-      console.error('Error fetching scenarios:', err);
+      Logger.error('Error fetching scenarios:', err);
       setError('Failed to load scenarios');
     } finally {
       setIsLoading(false);
@@ -106,7 +107,7 @@ const ScenarioManager: React.FC = () => {
       // Refresh scenarios
       await fetchScenarios();
     } catch (err) {
-      console.error('Error creating scenario:', err);
+      Logger.error('Error creating scenario:', err);
       setError('Failed to create scenario');
     } finally {
       setIsLoading(false);
@@ -133,7 +134,7 @@ const ScenarioManager: React.FC = () => {
       // Refresh scenarios
       await fetchScenarios();
     } catch (err) {
-      console.error('Error cloning scenario:', err);
+      Logger.error('Error cloning scenario:', err);
       setError('Failed to clone scenario');
     } finally {
       setIsLoading(false);
@@ -176,7 +177,7 @@ const ScenarioManager: React.FC = () => {
       // Refresh scenarios
       await fetchScenarios();
     } catch (err) {
-      console.error('Error deleting scenario:', err);
+      Logger.error('Error deleting scenario:', err);
       setError('Failed to delete scenario');
     } finally {
       setIsLoading(false);
@@ -205,7 +206,7 @@ const ScenarioManager: React.FC = () => {
       setIsComparing(true);
       setIsLoading(true);
       
-      console.log("Sending scenario comparison request with:", {
+      Logger.debug("Sending scenario comparison request with:", {
         scenarioIds: selectedComparisonScenarioIds,
         position: selectedPosition !== 'all_positions' ? selectedPosition : undefined
       });
@@ -215,19 +216,19 @@ const ScenarioManager: React.FC = () => {
         selectedPosition !== 'all_positions' ? selectedPosition : undefined
       );
       
-      console.log("Received comparison response:", response);
+      Logger.debug("Received comparison response:", response);
       
       if (!response.players || !Array.isArray(response.players)) {
-        console.error("Invalid comparison response format:", response);
+        Logger.error("Invalid comparison response format:", response);
         setError('Received invalid comparison data format');
         setComparisonData([]);
         return;
       }
       
       setComparisonData(response.players);
-      console.log(`Successfully loaded comparison data for ${response.players.length} players`);
+      Logger.info(`Successfully loaded comparison data for ${response.players.length} players`);
     } catch (err) {
-      console.error('Error comparing scenarios:', err);
+      Logger.error('Error comparing scenarios:', err);
       setError(`Failed to compare scenarios: ${err instanceof Error ? err.message : 'Unknown error'}`);
       setComparisonData([]);
     } finally {

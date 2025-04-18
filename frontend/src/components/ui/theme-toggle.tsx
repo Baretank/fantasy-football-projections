@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MoonIcon, SunIcon } from '@heroicons/react/24/outline';
 import { Button } from './button';
+import { Logger } from '@/utils/logger';
 
 export function ThemeToggle() {
   // Check if we have dark mode currently
@@ -16,7 +17,7 @@ export function ThemeToggle() {
     setIsDark(isDarkMode());
     
     // Log initial state
-    console.log("ThemeToggle mounted, current theme:", isDarkMode() ? "dark" : "light");
+    Logger.debug("ThemeToggle mounted, current theme:", isDarkMode() ? "dark" : "light");
   }, []);
 
   const toggleTheme = () => {
@@ -25,12 +26,12 @@ export function ThemeToggle() {
       // Switching to light
       document.documentElement.classList.remove('dark');
       localStorage.setItem('theme', 'light');
-      console.log("Theme toggled to: light");
+      Logger.debug("Theme toggled to: light");
     } else {
       // Switching to dark
       document.documentElement.classList.add('dark');
       localStorage.setItem('theme', 'dark');
-      console.log("Theme toggled to: dark");
+      Logger.debug("Theme toggled to: dark");
     }
     
     // Update state to match new DOM state (opposite of current state)

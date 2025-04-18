@@ -1,6 +1,7 @@
 import pytest
 from backend.services import DataService
 
+
 class TestDataService:
     @pytest.fixture(scope="function")
     def service(self, test_db):
@@ -11,12 +12,12 @@ class TestDataService:
     async def test_get_player(self, service, sample_players):
         """Test player retrieval by ID."""
         mahomes_id = sample_players["ids"]["Patrick Mahomes"]
-        
+
         # Test successful retrieval
         player = await service.get_player(mahomes_id)
         print("\nTest get_player:")
         print(f"Retrieved player: {player.name} ({player.position}) - {player.team}")
-        
+
         assert player is not None
         assert player.name == "Patrick Mahomes"
         assert player.team == "KC"
@@ -64,7 +65,7 @@ class TestDataService:
         print("Stats for Patrick Mahomes (2023):")
         for stat in mahomes_stats:
             print(f"- {stat.stat_type}: {stat.value}")
-        
+
         # Verify Mahomes stats
         assert len(mahomes_stats) == 7  # Number of stats we created
         pass_attempts = next(stat for stat in mahomes_stats if stat.stat_type == "pass_attempts")
@@ -78,7 +79,7 @@ class TestDataService:
         print("Stats for Christian McCaffrey (2023):")
         for stat in mccaffrey_stats:
             print(f"- {stat.stat_type}: {stat.value}")
-        
+
         # Verify McCaffrey stats
         assert len(mccaffrey_stats) == 7  # Number of stats we created
         rush_yards = next(stat for stat in mccaffrey_stats if stat.stat_type == "rush_yards")

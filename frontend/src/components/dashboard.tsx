@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Logger } from '@/utils/logger';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
@@ -111,7 +112,7 @@ const Dashboard: React.FC = () => {
                 
               byPosition[position] = sorted;
             } catch (posError) {
-              console.error(`Error fetching ${position} projections:`, posError);
+              Logger.error(`Error fetching ${position} projections:`, posError);
               byPosition[position] = [];
             }
           }
@@ -119,7 +120,7 @@ const Dashboard: React.FC = () => {
           setTopProjections(byPosition);
         }
       } catch (err) {
-        console.error("Error fetching dashboard data:", err);
+        Logger.error("Error fetching dashboard data:", err);
         setError("Failed to load dashboard data. Please try again later.");
       } finally {
         setIsLoading(false);

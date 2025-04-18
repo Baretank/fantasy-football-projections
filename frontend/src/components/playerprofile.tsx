@@ -86,7 +86,7 @@ const PlayerProfile: React.FC<PlayerProfileProps> = ({
           setTrends(trendData);
         }
       } catch (err) {
-        console.error('Error fetching player data:', err);
+        Logger.error('Error fetching player data:', err);
         setError('Failed to load player data');
       } finally {
         setLoading(false);

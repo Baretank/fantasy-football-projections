@@ -8,6 +8,7 @@ import {
   DraftStatusUpdate,
   DraftBoard
 } from '@/types/index';
+import { Logger } from '@/utils/logger';
 
 // Using Vite proxy configuration from vite.config.ts
 const API_BASE_URL = '/api';
@@ -36,48 +37,48 @@ async function fetchApi(
   }
 
   try {
-    console.log(`API Request: ${method} ${url}`);
-    if (body) console.log('Request body:', body);
+    Logger.debug(`API Request: ${method} ${url}`);
+    if (body) Logger.debug('Request body:', body);
     
     // Add debug info about the URL
-    console.log(`Full request URL: ${new URL(url, window.location.origin).href}`);
+    Logger.debug(`Full request URL: ${new URL(url, window.location.origin).href}`);
     
     const response = await fetch(url, options);
-    console.log(`Response status: ${response.status}, ok: ${response.ok}`);
+    Logger.debug(`Response status: ${response.status}, ok: ${response.ok}`);
     
     if (!response.ok) {
       // Try to parse error response
       try {
         // Log the raw response text for debugging
         const responseText = await response.text();
-        console.error(`Error response text:`, responseText);
+        Logger.error(`Error response text:`, responseText);
         
         let errorData;
         try {
           errorData = JSON.parse(responseText);
         } catch (parseError) {
-          console.error(`Could not parse error response as JSON:`, parseError);
+          Logger.error(`Could not parse error response as JSON:`, parseError);
           throw new Error(`API Error: ${response.status} ${response.statusText}`);
         }
         
-        console.error(`API Error (${response.status}):`, errorData);
+        Logger.error(`API Error (${response.status}):`, errorData);
         throw new Error(errorData.detail || `API Error: ${response.status} ${response.statusText}`);
       } catch (e) {
         // If error response isn't valid JSON or can't be read
-        console.error(`API Error (${response.status}): Could not parse response`, e);
+        Logger.error(`API Error (${response.status}): Could not parse response`, e);
         throw new Error(`API Error: ${response.status} ${response.statusText}`);
       }
     }
     
     const responseText = await response.text();
-    console.log(`Raw response:`, responseText.substring(0, 100) + (responseText.length > 100 ? '...' : ''));
+    Logger.debug(`Raw response:`, responseText.substring(0, 100) + (responseText.length > 100 ? '...' : ''));
     
     // Parse as JSON if there's content, otherwise return empty object
     const data = responseText ? JSON.parse(responseText) : {};
-    console.log(`API Response: ${method} ${normalizedEndpoint}`, data);
+    Logger.debug(`API Response: ${method} ${normalizedEndpoint}`, data);
     return data;
   } catch (error) {
-    console.error(`API Request Failed: ${method} ${normalizedEndpoint}`, error);
+    Logger.error(`API Request Failed: ${method} ${normalizedEndpoint}`, error);
     // Rethrow the error for the caller to handle
     throw error;
   }
@@ -100,10 +101,10 @@ export const PlayerService = {
     const queryString = params.toString();
     if (queryString) endpoint += `?${queryString}`;
     
-    console.log(`PlayerService.getPlayers: Fetching from ${endpoint}`);
+    Logger.debug(`PlayerService.getPlayers: Fetching from ${endpoint}`);
     try {
       const response = await fetchApi(endpoint);
-      console.log(`PlayerService.getPlayers: Response structure:`, 
+      Logger.debug(`PlayerService.getPlayers: Response structure:`, 
         response && typeof response === 'object' 
           ? Object.keys(response) 
           : typeof response);
@@ -111,7 +112,7 @@ export const PlayerService = {
       // This API endpoint returns { players: [...], pagination: {...} }
       return response;
     } catch (error) {
-      console.error(`PlayerService.getPlayers error:`, error);
+      Logger.error(`PlayerService.getPlayers error:`, error);
       // Return empty response with players array to maintain expected structure
       return { players: [], pagination: { total_count: 0, page: 1, total_pages: 1 } };
     }
@@ -127,11 +128,11 @@ export const PlayerService = {
     const queryString = params.toString();
     const endpoint = `/players/rookies${queryString ? `?${queryString}` : ''}`;
     
-    console.log(`Fetching rookies with endpoint: ${endpoint}`);
+    Logger.debug(`Fetching rookies with endpoint: ${endpoint}`);
     try {
       return await fetchApi(endpoint);
     } catch (error) {
-      console.error(`Error fetching rookies from ${endpoint}:`, error);
+      Logger.error(`Error fetching rookies from ${endpoint}:`, error);
       throw error;
     }
   },
@@ -153,25 +154,25 @@ export const PlayerService = {
       const response = await this.getPlayers();
       
       // Log the response for debugging
-      console.log("getPlayersOverview response:", response);
+      Logger.debug("getPlayersOverview response:", response);
       
       // If the response has a players array, return that
       if (response && typeof response === 'object' && Array.isArray(response.players)) {
-        console.log("Returning players array from response.players");
+        Logger.debug("Returning players array from response.players");
         return response.players;
       } 
       
       // If the response is already an array, return it
       if (Array.isArray(response)) {
-        console.log("Response is already an array, returning directly");
+        Logger.debug("Response is already an array, returning directly");
         return response;
       }
       
       // Return empty array as fallback
-      console.log("Returning empty array as fallback");
+      Logger.debug("Returning empty array as fallback");
       return [];
     } catch (error) {
-      console.error(`PlayerService.getPlayersOverview error:`, error);
+      Logger.error(`PlayerService.getPlayersOverview error:`, error);
       return [];
     }
   }
@@ -185,7 +186,7 @@ export const ProjectionService = {
     season?: number
   ): Promise<Projection[]> {
     if (!playerId) {
-      console.error("getPlayerProjections called with empty playerId");
+      Logger.error("getPlayerProjections called with empty playerId");
       return [];
     }
     
@@ -199,13 +200,13 @@ export const ProjectionService = {
     const queryString = params.toString();
     if (queryString) endpoint += `?${queryString}`;
     
-    console.log(`ProjectionService: Requesting projections for player ${playerId}${scenarioId ? ` in scenario ${scenarioId}` : ''}`);
+    Logger.debug(`ProjectionService: Requesting projections for player ${playerId}${scenarioId ? ` in scenario ${scenarioId}` : ''}`);
     const result = await fetchApi(endpoint);
-    console.log(`ProjectionService: Received ${Array.isArray(result) ? result.length : 0} projections for player ${playerId}`);
+    Logger.debug(`ProjectionService: Received ${Array.isArray(result) ? result.length : 0} projections for player ${playerId}`);
     
     // Return empty array if result is not an array
     if (!Array.isArray(result)) {
-      console.error(`Unexpected response format for projections, expected array but got:`, typeof result);
+      Logger.error(`Unexpected response format for projections, expected array but got:`, typeof result);
       return [];
     }
     
@@ -335,22 +336,22 @@ export const ProjectionService = {
 export const ScenarioService = {
   async getScenarios(): Promise<Scenario[]> {
     try {
-      console.log("ScenarioService: Requesting scenarios from /scenarios");
+      Logger.debug("ScenarioService: Requesting scenarios from /scenarios");
       const result = await fetchApi('/scenarios');
-      console.log("ScenarioService: Received response:", result);
+      Logger.debug("ScenarioService: Received response:", result);
       return result;
     } catch (error) {
-      console.error("ScenarioService.getScenarios error:", error);
+      Logger.error("ScenarioService.getScenarios error:", error);
       throw error;
     }
   },
 
   async getScenario(scenarioId: string): Promise<Scenario> {
     try {
-      console.log(`ScenarioService: Requesting scenario ${scenarioId}`);
+      Logger.debug(`ScenarioService: Requesting scenario ${scenarioId}`);
       return fetchApi(`/scenarios/${scenarioId}`);
     } catch (error) {
-      console.error("ScenarioService.getScenario error:", error);
+      Logger.error("ScenarioService.getScenario error:", error);
       throw error;
     }
   },
@@ -361,14 +362,14 @@ export const ScenarioService = {
     isBaseline: boolean = false
   ): Promise<Scenario> {
     try {
-      console.log(`ScenarioService: Creating scenario "${name}"`);
+      Logger.debug(`ScenarioService: Creating scenario "${name}"`);
       return fetchApi(
         '/scenarios', 
         'POST', 
         { name, description, is_baseline: isBaseline }
       );
     } catch (error) {
-      console.error("ScenarioService.createScenario error:", error);
+      Logger.error("ScenarioService.createScenario error:", error);
       throw error;
     }
   },
@@ -380,7 +381,7 @@ export const ScenarioService = {
   ): Promise<Projection[]> {
     try {
       if (!scenarioId) {
-        console.error("getScenarioProjections called with empty scenarioId");
+        Logger.error("getScenarioProjections called with empty scenarioId");
         return [];
       }
       
@@ -393,19 +394,19 @@ export const ScenarioService = {
       const queryString = params.toString();
       if (queryString) endpoint += `?${queryString}`;
       
-      console.log(`ScenarioService: Requesting projections for scenario ${scenarioId} with position=${position || 'all'}`);
+      Logger.debug(`ScenarioService: Requesting projections for scenario ${scenarioId} with position=${position || 'all'}`);
       const result = await fetchApi(endpoint);
-      console.log(`ScenarioService: Received ${Array.isArray(result) ? result.length : 0} projections for scenario ${scenarioId}, position=${position || 'all'}`);
+      Logger.debug(`ScenarioService: Received ${Array.isArray(result) ? result.length : 0} projections for scenario ${scenarioId}, position=${position || 'all'}`);
       
       // Return empty array if result is not an array
       if (!Array.isArray(result)) {
-        console.error(`Unexpected response format for projections, expected array but got:`, typeof result);
+        Logger.error(`Unexpected response format for projections, expected array but got:`, typeof result);
         return [];
       }
       
       return result;
     } catch (error) {
-      console.error("ScenarioService.getScenarioProjections error:", error);
+      Logger.error("ScenarioService.getScenarioProjections error:", error);
       throw error;
     }
   },
@@ -416,24 +417,24 @@ export const ScenarioService = {
     description?: string
   ): Promise<Scenario> {
     try {
-      console.log(`ScenarioService: Cloning scenario ${scenarioId} as "${name}"`);
+      Logger.debug(`ScenarioService: Cloning scenario ${scenarioId} as "${name}"`);
       return fetchApi(
         `/scenarios/${scenarioId}/clone?name=${encodeURIComponent(name)}` + 
         (description ? `&description=${encodeURIComponent(description)}` : ''), 
         'POST'
       );
     } catch (error) {
-      console.error("ScenarioService.cloneScenario error:", error);
+      Logger.error("ScenarioService.cloneScenario error:", error);
       throw error;
     }
   },
 
   async deleteScenario(scenarioId: string): Promise<void> {
     try {
-      console.log(`ScenarioService: Deleting scenario ${scenarioId}`);
+      Logger.debug(`ScenarioService: Deleting scenario ${scenarioId}`);
       return fetchApi(`/scenarios/${scenarioId}`, 'DELETE');
     } catch (error) {
-      console.error("ScenarioService.deleteScenario error:", error);
+      Logger.error("ScenarioService.deleteScenario error:", error);
       throw error;
     }
   },
@@ -443,14 +444,14 @@ export const ScenarioService = {
     position?: string
   ): Promise<any> {
     try {
-      console.log(`ScenarioService: Comparing scenarios`, scenarioIds);
+      Logger.debug(`ScenarioService: Comparing scenarios`, scenarioIds);
       return fetchApi(
         '/scenarios/compare', 
         'POST', 
         { scenario_ids: scenarioIds, position }
       );
     } catch (error) {
-      console.error("ScenarioService.compareScenarios error:", error);
+      Logger.error("ScenarioService.compareScenarios error:", error);
       throw error;
     }
   }

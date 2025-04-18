@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Logger } from '@/utils/logger';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -75,7 +76,7 @@ const PlayerSelect: React.FC<PlayerSelectProps> = ({
         setTeams(allTeams.sort());
       }
     } catch (error) {
-      console.error('Error fetching players:', error);
+      Logger.error('Error fetching players:', error);
       setError('Failed to load players. Please try again.');
     } finally {
       setLoading(false);

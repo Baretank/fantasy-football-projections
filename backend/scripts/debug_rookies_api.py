@@ -12,6 +12,7 @@ from backend.api.schemas import PlayerResponse
 from pydantic import ConfigDict
 import json
 
+
 def debug_rookies_api():
     """Debug script to test the conversion from ORM objects to Pydantic models"""
     db = SessionLocal()
@@ -19,7 +20,7 @@ def debug_rookies_api():
         # Check if there are rookies in the database
         rookies = db.query(Player).filter(Player.status == "Rookie").all()
         print(f"Found {len(rookies)} rookies in the database")
-        
+
         if rookies:
             print("\nSample rookie data:")
             sample = rookies[0]
@@ -28,7 +29,7 @@ def debug_rookies_api():
             print(f"- Position: {sample.position}")
             print(f"- Team: {sample.team}")
             print(f"- Status: {sample.status}")
-            
+
             # Test manual conversion to dict
             try:
                 player_dict = {
@@ -49,12 +50,12 @@ def debug_rookies_api():
                     "draft_pick": sample.draft_pick,
                 }
                 print(f"\nManual dict conversion successful")
-                
+
                 try:
                     # Test JSON serialization
                     json_str = json.dumps(player_dict, default=str)
                     print(f"JSON serialization successful")
-                    
+
                     # Test PlayerResponse model
                     response_model = PlayerResponse(**player_dict)
                     print(f"Pydantic conversion successful: {response_model.model_dump()}")
@@ -62,9 +63,10 @@ def debug_rookies_api():
                     print(f"Pydantic conversion error: {str(e)}")
             except Exception as e:
                 print(f"Dict conversion error: {str(e)}")
-            
+
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     debug_rookies_api()

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import requests
 
+
 def test_explicit():
     """Direct test of the rookies endpoint with explicit URL construction"""
     # Try different URL constructions
@@ -10,14 +11,14 @@ def test_explicit():
         "http://localhost:8000/api/players?status=Rookie",
         "http://127.0.0.1:8000/api/players/rookies",
     ]
-    
+
     print("Testing multiple URL formats:")
     for url in urls:
         print(f"\nTesting URL: {url}")
         try:
             response = requests.get(url)
             print(f"Status code: {response.status_code}")
-            
+
             if response.status_code == 200:
                 data = response.json()
                 if isinstance(data, list):
@@ -30,7 +31,7 @@ def test_explicit():
                 print(f"Error: {response.text}")
         except Exception as e:
             print(f"Exception: {e}")
-    
+
     # Test other endpoints to see if they're working
     print("\nTesting main players endpoint:")
     try:
@@ -41,6 +42,7 @@ def test_explicit():
             print(f"Players found: {data['pagination']['total_count']}")
     except Exception as e:
         print(f"Exception: {e}")
+
 
 if __name__ == "__main__":
     test_explicit()

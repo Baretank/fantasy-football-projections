@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Logger } from '@/utils/logger';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -76,12 +77,12 @@ const DashboardPage: React.FC = () => {
         
         // Fetch all scenarios
         const scenariosData = await ScenarioService.getScenarios();
-        console.log("All scenarios:", scenariosData);
+        Logger.debug("All scenarios:", scenariosData);
         setScenarios(scenariosData);
         
         // Find baseline scenario
         const baseline = scenariosData.find(s => s.is_baseline) || scenariosData[0];
-        console.log("Selected baseline scenario:", baseline);
+        Logger.debug("Selected baseline scenario:", baseline);
         setBaselineScenario(baseline);
         
         // Fetch player overview data
@@ -158,11 +159,11 @@ const DashboardPage: React.FC = () => {
           for (const [position, promise] of Object.entries(positionPromises)) {
             try {
               const projections = await promise;
-              console.log(`Received ${position} projections:`, projections);
+              Logger.debug(`Received ${position} projections:`, projections);
               
               // Check that projections is an array and has content
               if (!Array.isArray(projections) || projections.length === 0) {
-                console.log(`No ${position} projections found.`);
+                Logger.info(`No ${position} projections found.`);
                 positionResults[position] = [];
                 continue;
               }
@@ -173,7 +174,7 @@ const DashboardPage: React.FC = () => {
                 .sort((a, b) => (b.half_ppr || 0) - (a.half_ppr || 0))
                 .slice(0, 10);
               
-              console.log(`Sorted ${position} projections:`, sorted);
+              Logger.debug(`Sorted ${position} projections:`, sorted);
               positionResults[position] = sorted;
               
               // For top players, fetch projection ranges
@@ -208,28 +209,28 @@ const DashboardPage: React.FC = () => {
                       ]);
                     }
                   } catch (rangeError) {
-                    console.error(`Error fetching range for ${projection.projection_id}:`, rangeError);
+                    Logger.error(`Error fetching range for ${projection.projection_id}:`, rangeError);
                   }
                 }
               }
             } catch (posError) {
-              console.error(`Error fetching ${position} projections:`, posError);
+              Logger.error(`Error fetching ${position} projections:`, posError);
               positionResults[position] = [];
             }
           }
           
-          console.log("Final position results before setting state:", positionResults);
+          Logger.debug("Final position results before setting state:", positionResults);
           setTopProjections(positionResults);
           
           // Diagnostic for empty position results
           for (const [position, projections] of Object.entries(positionResults)) {
             if (!projections || projections.length === 0) {
-              console.warn(`No projections found for position: ${position}`);
+              Logger.warn(`No projections found for position: ${position}`);
             }
           }
         }
       } catch (err) {
-        console.error("Error fetching dashboard data:", err);
+        Logger.error("Error fetching dashboard data:", err);
         setError("Failed to load dashboard data. Please try again later.");
       } finally {
         setIsLoading(false);
@@ -358,7 +359,7 @@ const DashboardPage: React.FC = () => {
       setIsRunningProjections(true);
       setError(null);
       
-      console.log("Starting to generate baseline projections");
+      Logger.info("Starting to generate baseline projections");
       
       // Get all players first
       const playersData = await PlayerService.getPlayersOverview();
@@ -366,7 +367,7 @@ const DashboardPage: React.FC = () => {
         throw new Error("No players found to generate projections");
       }
       
-      console.log(`Found ${playersData.length} players for projection generation`);
+      Logger.info(`Found ${playersData.length} players for projection generation`);
       
       // Create projections for each player
       let successCount = 0;
@@ -399,7 +400,7 @@ const DashboardPage: React.FC = () => {
             );
             
             if (Array.isArray(existingProjections) && existingProjections.length > 0) {
-              console.log(`Projection already exists for ${player.name}`);
+              Logger.info(`Projection already exists for ${player.name}`);
               return true;
             }
             
@@ -410,10 +411,10 @@ const DashboardPage: React.FC = () => {
               baselineScenario.scenario_id
             );
             
-            console.log(`Created projection for ${player.name}:`, result);
+            Logger.info(`Created projection for ${player.name}:`, result);
             return true;
           } catch (error) {
-            console.error(`Error creating projection for ${player?.name || player?.player_id || 'unknown player'}:`, error);
+            Logger.error(`Error creating projection for ${player?.name || player?.player_id || 'unknown player'}:`, error);
             return false;
           }
         });
@@ -424,13 +425,13 @@ const DashboardPage: React.FC = () => {
         errorCount += batchResults.filter(result => !result).length;
         
         // Update progress log
-        console.log(`Processed ${i + batchSize > playersData.length ? playersData.length : i + batchSize}/${playersData.length} players`);
+        Logger.info(`Processed ${i + batchSize > playersData.length ? playersData.length : i + batchSize}/${playersData.length} players`);
         
         // Add a small delay to prevent overwhelming the API
         await new Promise(resolve => setTimeout(resolve, 500));
       }
       
-      console.log(`Projection generation complete: ${successCount} successful, ${errorCount} failed`);
+      Logger.info(`Projection generation complete: ${successCount} successful, ${errorCount} failed`);
       
       // Show toast notification
       toast({
@@ -442,7 +443,7 @@ const DashboardPage: React.FC = () => {
       // Reload the page data to show the new projections
       window.location.reload();
     } catch (err) {
-      console.error("Error running projections:", err);
+      Logger.error("Error running projections:", err);
       setError(`Failed to run projections: ${err instanceof Error ? err.message : 'Unknown error'}`);
       
       // Show error toast

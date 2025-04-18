@@ -151,5 +151,18 @@ test_output/
 
 # Local configuration
 CLAUDE.md
-backend/CLAUDE.md
-frontend/CLAUDE.md
+
+
+# Linting and Type Checking
+.mypy_cache/
+**/.mypy_cache/
+.eslintcache
+**/.eslintcache
+.ruff_cache/
+**/.ruff_cache/
+*.tsbuildinfo
+backend/.flake8
+backend/mypy.ini
+backend/pyproject.toml
+frontend/.eslintrc.json
+.eslintrc.json

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Logger } from '@/utils/logger';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -38,7 +39,7 @@ const StatsDisplay: React.FC<StatsDisplayProps> = ({ playerId, position, season 
         setStats(processStats(data.stats));
         setIsLoading(false);
       } catch (error) {
-        console.error('Error fetching stats:', error);
+        Logger.error('Error fetching stats:', error);
         setIsLoading(false);
       }
     };
