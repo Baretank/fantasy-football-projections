@@ -1,9 +1,10 @@
 import pytest
 from sqlalchemy import and_
 import uuid
+from unittest.mock import MagicMock, patch
 
-from backend.services.data_validation import DataValidationService
-from backend.database.models import Player, BaseStat, GameStats
+from backend.services.data_validation import DataValidationService, ValidationResultDict
+from backend.database.models import Player, BaseStat, GameStats, Projection, TeamStat
 
 
 class TestDataValidation:
@@ -284,3 +285,162 @@ class TestDataValidation:
 
         assert len(issues) == 1
         assert "invalid position: K" in issues[0]
+        
+    @pytest.fixture(scope="function")
+    def mock_projection(self):
+        """Create a sample projection for testing mathematical consistency."""
+        # Create a mock projection that won't be saved to the database
+        projection = MagicMock(spec=Projection)
+        
+        # Set up all the attributes we need for testing
+        projection.projection_id = str(uuid.uuid4())
+        projection.player_id = str(uuid.uuid4())
+        projection.season = 2025
+        projection.games = 17
+        
+        # QB stats
+        projection.pass_attempts = 500
+        projection.completions = 325
+        projection.pass_yards = 4000
+        projection.pass_td = 30
+        projection.interceptions = 10
+        
+        # Rushing stats
+        projection.rush_attempts = 40
+        projection.rush_yards = 200
+        projection.rush_td = 2
+        
+        # Efficiency metrics (using attribute names that match our validation code)
+        projection.comp_pct = 65.0  # Correct: 325/500*100 = 65.0
+        projection.yards_per_att = 8.0  # Correct: 4000/500 = 8.0
+        projection.yards_per_completion = 12.31  # Correct: 4000/325 ≈ 12.31
+        projection.pass_td_rate = 6.0  # Correct: 30/500*100 = 6.0
+        projection.int_rate = 2.0  # Correct: 10/500*100 = 2.0
+        projection.rush_yards_per_att = 5.0  # Correct: 200/40 = 5.0
+        
+        # Additional stats
+        projection.fumbles_lost = 0  # No fumbles
+        projection.targets = 5  # Some targets for receiving
+        projection.receptions = 3  # Some receptions
+        projection.rec_yards = 40  # Some receiving yards
+        projection.rec_td = 0  # No receiving TDs
+        
+        # Fantasy points
+        projection.ppr = 262.0  # Correctly calculated
+        projection.half_ppr = 262.0  # Correctly calculated
+        projection.standard = 262.0  # Correctly calculated
+        
+        return projection
+        
+    @pytest.mark.asyncio
+    async def test_validate_qb_math(self, validation_service, mock_projection):
+        """Test QB mathematical validation when values are correct."""
+        # Test the helper method directly
+        issues = validation_service._validate_qb_math(mock_projection)
+        
+        # Should have no issues since the values are consistent
+        assert len(issues) == 0
+        
+    @pytest.mark.asyncio
+    async def test_validate_qb_math_with_errors(self, validation_service, mock_projection):
+        """Test QB mathematical validation when values are incorrect."""
+        # Introduce inconsistencies
+        mock_projection.comp_pct = 70.0  # Should be 65.0
+        mock_projection.yards_per_att = 7.0      # Should be 8.0
+        
+        # Test the helper method directly
+        issues = validation_service._validate_qb_math(mock_projection)
+        
+        # Should have 2 issues
+        assert len(issues) == 2
+        assert "Completion percentage mismatch" in issues[0]
+        assert "Yards per attempt mismatch" in issues[1]
+        
+    @pytest.mark.asyncio
+    async def test_validate_fantasy_points(self, validation_service, mock_projection):
+        """Test validation of fantasy point calculations."""
+        # Set fantasy points to incorrect values
+        mock_projection.ppr = 300.0       # Should be 262.0
+        mock_projection.half_ppr = 280.0  # Should be 262.0
+        mock_projection.standard = 240.0  # Should be 262.0
+        
+        # Test the helper method directly
+        issues = validation_service._validate_fantasy_points(mock_projection)
+        
+        # Should have 3 issues
+        assert len(issues) == 3
+        assert "PPR points mismatch" in issues[0]
+        assert "Half PPR points mismatch" in issues[1]
+        assert "Standard points mismatch" in issues[2]
+        
+    @pytest.mark.asyncio
+    async def test_validate_team_consistency(self, validation_service, test_db):
+        """Test validation of team-level statistical consistency."""
+        # Create team stats
+        team = "KC"
+        season = 2025
+        team_stat = TeamStat(
+            team=team,
+            season=season,
+            plays=1000,
+            pass_attempts=600,
+            completions=390,
+            pass_yards=4500,
+            pass_td=35,
+            interceptions=12,
+            rush_attempts=400,
+            rush_yards=1800,
+            rush_td=18,
+            targets=600,
+            receptions=390,
+            rec_yards=4500,
+            rec_td=35,
+            pass_percentage=60.0,
+            pass_td_rate=5.83,
+            rush_yards_per_carry=4.5,
+        )
+        test_db.add(team_stat)
+        
+        # Create two KC players with stats that add up to team totals
+        player1_id = str(uuid.uuid4())
+        player1 = Player(player_id=player1_id, name="QB One", team=team, position="QB")
+        test_db.add(player1)
+        
+        player2_id = str(uuid.uuid4())
+        player2 = Player(player_id=player2_id, name="RB One", team=team, position="RB")
+        test_db.add(player2)
+        
+        # Add stats that match team totals
+        stats1 = [
+            BaseStat(player_id=player1_id, season=season, stat_type="pass_attempts", value=600.0),
+            BaseStat(player_id=player1_id, season=season, stat_type="completions", value=390.0),
+            BaseStat(player_id=player1_id, season=season, stat_type="pass_yards", value=4500.0),
+            BaseStat(player_id=player1_id, season=season, stat_type="pass_td", value=35.0),
+            BaseStat(player_id=player1_id, season=season, stat_type="interceptions", value=12.0),
+            BaseStat(player_id=player1_id, season=season, stat_type="rush_attempts", value=50.0),
+            BaseStat(player_id=player1_id, season=season, stat_type="rush_yards", value=200.0),
+            BaseStat(player_id=player1_id, season=season, stat_type="rush_td", value=3.0),
+        ]
+        
+        stats2 = [
+            BaseStat(player_id=player2_id, season=season, stat_type="rush_attempts", value=350.0),
+            BaseStat(player_id=player2_id, season=season, stat_type="rush_yards", value=1600.0),
+            BaseStat(player_id=player2_id, season=season, stat_type="rush_td", value=15.0),
+            BaseStat(player_id=player2_id, season=season, stat_type="targets", value=80.0),
+            BaseStat(player_id=player2_id, season=season, stat_type="receptions", value=60.0),
+            BaseStat(player_id=player2_id, season=season, stat_type="rec_yards", value=500.0),
+            BaseStat(player_id=player2_id, season=season, stat_type="rec_td", value=3.0),
+        ]
+        
+        for stat in stats1 + stats2:
+            test_db.add(stat)
+        
+        test_db.commit()
+        
+        # Run the team consistency validation
+        issues = validation_service.validate_team_consistency(team, season)
+        
+        # There should be at least one issue (RB receptions and yards don't match team totals)
+        assert len(issues) > 0
+        assert any("rec_yards mismatch" in issue for issue in issues)
+        assert any("rec_td mismatch" in issue for issue in issues)

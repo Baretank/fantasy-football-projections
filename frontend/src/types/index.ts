@@ -241,20 +241,29 @@ export interface StatDisplayFormat {
 }
 
 export const STAT_FORMATS: Record<string, StatDisplayFormat> = {
+  // Fantasy points
   half_ppr: { 
     label: 'Half PPR', 
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0'
   },
+  
+  // Game info
+  games: {
+    label: 'Games',
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
+  },
+  
+  // Passing stats
   pass_attempts: { 
     label: 'Pass Att', 
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   completions: { 
-    label: 'Completions', 
+    label: 'Compl', 
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   pass_yards: { 
-    label: 'Pass Yards', 
+    label: 'Pass Yds', 
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   pass_td: { 
@@ -265,34 +274,61 @@ export const STAT_FORMATS: Record<string, StatDisplayFormat> = {
     label: 'INT', 
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0'
   },
+  sacks: { 
+    label: 'Sacks', 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0'
+  },
+  sack_yards: {
+    label: 'Sack Yds',
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
+  },
+  gross_pass_yards: {
+    label: 'Gross Pass',
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
+  },
+  net_pass_yards: {
+    label: 'Net Pass',
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
+  },
+  
+  // Rushing stats
   rush_attempts: { 
     label: 'Carries', 
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   rush_yards: { 
-    label: 'Rush Yards', 
+    label: 'Rush Yds', 
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   rush_td: { 
     label: 'Rush TD', 
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0'
   },
+  fumbles: { 
+    label: 'Fumbles', 
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0',
+    color: (value) => value !== null && value !== undefined ? (value < 1 ? 'text-green-500' : value > 3 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
+  },
+  
+  // Receiving stats
   targets: { 
     label: 'Targets', 
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   receptions: { 
-    label: 'Receptions', 
+    label: 'Rec', 
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   rec_yards: { 
-    label: 'Rec Yards', 
+    label: 'Rec Yds', 
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(0) : '0'
   },
   rec_td: { 
     label: 'Rec TD', 
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0'
   },
+  
+  // Efficiency metrics - Passing
   comp_pct: { 
     label: 'Comp %', 
     formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%',
@@ -303,8 +339,13 @@ export const STAT_FORMATS: Record<string, StatDisplayFormat> = {
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0',
     color: (value) => value !== null && value !== undefined ? (value > 7.5 ? 'text-green-500' : value < 6.5 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
   },
+  net_yards_per_att: {
+    label: 'Net YPA',
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0',
+    color: (value) => value !== null && value !== undefined ? (value > 7.0 ? 'text-green-500' : value < 6.0 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
+  },
   pass_td_rate: { 
-    label: 'TD %', 
+    label: 'Pass TD %', 
     formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%',
     color: (value) => value !== null && value !== undefined ? (value > 0.05 ? 'text-green-500' : value < 0.03 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
   },
@@ -313,11 +354,35 @@ export const STAT_FORMATS: Record<string, StatDisplayFormat> = {
     formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%',
     color: (value) => value !== null && value !== undefined ? (value < 0.02 ? 'text-green-500' : value > 0.035 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
   },
+  sack_rate: {
+    label: 'Sack %',
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%',
+    color: (value) => value !== null && value !== undefined ? (value < 0.05 ? 'text-green-500' : value > 0.08 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
+  },
+  
+  // Efficiency metrics - Rushing
   yards_per_carry: { 
     label: 'YPC', 
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0',
     color: (value) => value !== null && value !== undefined ? (value > 4.5 ? 'text-green-500' : value < 3.5 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
   },
+  net_yards_per_carry: {
+    label: 'Net YPC',
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0',
+    color: (value) => value !== null && value !== undefined ? (value > 4.3 ? 'text-green-500' : value < 3.3 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
+  },
+  rush_td_rate: {
+    label: 'Rush TD %',
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%',
+    color: (value) => value !== null && value !== undefined ? (value > 0.04 ? 'text-green-500' : value < 0.02 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
+  },
+  fumble_rate: {
+    label: 'Fumble %',
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(2) + '%' : '0.00%',
+    color: (value) => value !== null && value !== undefined ? (value < 0.01 ? 'text-green-500' : value > 0.02 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
+  },
+  
+  // Efficiency metrics - Receiving
   catch_pct: { 
     label: 'Catch %', 
     formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%',
@@ -328,16 +393,49 @@ export const STAT_FORMATS: Record<string, StatDisplayFormat> = {
     formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0',
     color: (value) => value !== null && value !== undefined ? (value > 8.5 ? 'text-green-500' : value < 7.0 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
   },
+  rec_td_rate: {
+    label: 'Rec TD %',
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%',
+    color: (value) => value !== null && value !== undefined ? (value > 0.09 ? 'text-green-500' : value < 0.05 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
+  },
+  
+  // Usage metrics
+  snap_share: {
+    label: 'Snap %',
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%'
+  },
   target_share: { 
     label: 'Tgt Share', 
     formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%'
   },
-  fumbles: { 
-    label: 'Fumbles', 
-    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0'
+  rush_share: {
+    label: 'Rush Share',
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%'
   },
-  sacks: { 
-    label: 'Sacks', 
-    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) : '0.0'
+  redzone_share: {
+    label: 'RZ Share',
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%'
+  },
+  pass_att_pct: {
+    label: 'Pass Att %',
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%'
+  },
+  car_pct: {
+    label: 'Car %',
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%'
+  },
+  tar_pct: {
+    label: 'Tar %',
+    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%'
+  },
+  
+  // Status flags
+  has_overrides: {
+    label: 'Overrides',
+    formatter: (value) => value ? '✓' : '-'
+  },
+  is_fill_player: {
+    label: 'Fill Player',
+    formatter: (value) => value ? '✓' : '-'
   }
 };

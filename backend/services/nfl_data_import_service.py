@@ -21,6 +21,7 @@ from backend.services.typing import (
     safe_dict_get, 
     safe_calculate
 )
+from backend.services.active_player_service import ActivePlayerService
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +281,19 @@ class NFLDataImportService:
                 self.logger.info(
                     f"Additional filtering: removed {original_count - len(player_data)} non-fantasy players"
                 )
+            # Filter to only active players based on CSV roster
+            try:
+                active_service = ActivePlayerService()
+                pre_active_count = len(player_data)
+                # The adapter DataFrame may use 'display_name' and 'team_abbr'
+                player_data = active_service.filter_active(player_data)
+                removed = pre_active_count - len(player_data)
+                if removed > 0:
+                    self.logger.info(
+                        f"Filtering inactive players: removed {removed} players not on active roster"
+                    )
+            except Exception as e:
+                self.logger.warning(f"Active player filtering failed: {e}")
 
             # Process and transform data
             players_added = 0

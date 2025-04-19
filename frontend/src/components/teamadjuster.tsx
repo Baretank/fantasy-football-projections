@@ -21,6 +21,7 @@ import {
   Line
 } from 'recharts';
 import { Logger } from '@/utils/logger';
+import { getCurrentSeasonYear } from '@/utils/calculatioms';
 
 import { ProjectionService, PlayerService } from '@/services/api';
 import { Player, Projection } from '@/types/index';
@@ -147,9 +148,10 @@ const TeamAdjuster: React.FC = () => {
       setApplyingChanges(true);
       
       // In a real implementation, we'd send the adjustments to the API
+      // Use utility function for consistent season handling
       await ProjectionService.applyTeamAdjustments(
         selectedTeam,
-        2024, // Current season
+        getCurrentSeasonYear(), // Dynamic season year
         teamAdjustments
       );
 

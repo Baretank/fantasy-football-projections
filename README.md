@@ -210,6 +210,16 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 🔍 New Features in v0.3.0
 
+- Season-based data model: introduction of Seasons, TeamSeasons, PlayerSeasons, and GameStats tables for multi-season support
+- Enhanced projection engine: regression-based smoothing, usage share metrics (target/rush/pass), and fill-player consistency enforcement
+- API enhancements: season-scoped endpoints (/seasons, /players/{player_id}/seasons/{season_id}, /teams/{team_id}/seasons/{season_id}, /projections/seasons/{season_id}), bulk adjustments, and scenario comparison
+- Frontend updates: global season selector, dashboard sorting/filtering, improved loading states and error handling, and updated projection adjuster & scenario manager components
+- Data import improvements: import 2023/2024 season data, position-by-position import system, and enhanced data validation
+- Scenario system completion: full scenario creation/cloning, baseline scenario support, side-by-side comparisons, and team-level adjustments
+- Testing and documentation: expanded test coverage for new features and updated developer & user documentation
+
+## Features Added in v0.2.0
+
 - **Projection Uncertainty**: Statistical variance and confidence intervals for all projections
 - **Rookie Projection System**: Comprehensive rookie modeling with historical comparisons
 - **Side-by-Side Comparison**: Advanced player comparison tool with multiple visualization options
@@ -222,7 +232,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - **Batch API Operations**: Enhanced batch operations for projection management
 - **Data Export**: Export capabilities for projections in multiple formats
 
-### Previous Features in v0.2.0
+### Previous Features in v0.1.0
 
 - **Enhanced Data Models**: Added support for net yardage, fumbles, sacks, and detailed efficiency metrics
 - **Manual Override System**: New override tracking system with automatic dependent stat recalculation

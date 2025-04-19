@@ -42,6 +42,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Logger } from '@/utils/logger';
+import { getCurrentSeasonYear, percentChange } from '@/utils/calculatioms';
 
 import { 
   PlayerService, 
@@ -60,14 +61,7 @@ import {
   STAT_FORMATS
 } from '@/types/index';
 
-// Helper function to calculate percent change
-const percentChange = (newValue: number, oldValue: number): number => {
-  // Ensure we have valid numbers
-  if (newValue === null || newValue === undefined) newValue = 0;
-  if (oldValue === null || oldValue === undefined) oldValue = 0;
-  if (oldValue === 0) return 0;
-  return ((newValue - oldValue) / oldValue) * 100;
-};
+// Use utility function from calculatioms.ts - adjusted to return percentage
 
 const ProjectionAdjuster: React.FC = () => {
   // State for players, projections, and scenarios
@@ -216,9 +210,12 @@ const ProjectionAdjuster: React.FC = () => {
         } else {
           // No projection exists, try to create one
           if (selectedScenario.is_baseline) {
+            // Use the getCurrentSeasonYear function already imported at the top
+            const seasonYear = getCurrentSeasonYear();
+              
             const newProjection = await ProjectionService.createBaseProjection(
               selectedPlayer.player_id,
-              2024 // Current season - could make this dynamic
+              seasonYear // Dynamic season year
             );
             
             setCurrentProjection(newProjection);

@@ -4,9 +4,11 @@ from sqlalchemy import and_, or_, desc, func, text
 import logging
 from datetime import datetime
 import asyncio
+import pandas as pd
 
 from backend.database.models import Player, Projection, BaseStat, GameStats, Scenario
 from backend.services.cache_service import get_cache
+from backend.services.active_player_service import ActivePlayerService
 from backend.services.typing import (
     safe_float, safe_dict_get, 
     PlayerQueryResultDict, QueryResultDict, PlayerProjectionDataDict
@@ -18,9 +20,10 @@ logger = logging.getLogger(__name__)
 class QueryService:
     """Service for optimized database queries and player listings."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, active_player_service=None):
         self.db = db
         self.cache = get_cache()
+        self.active_player_service = active_player_service or ActivePlayerService()
 
     async def get_players_optimized(
         self,
@@ -31,6 +34,7 @@ class QueryService:
         page_size: int = 50,
         sort_by: str = "name",
         sort_dir: str = "asc",
+        active_only: bool = True,
     ) -> Tuple[List[PlayerQueryResultDict], int]:
         """
         Get players with optimized query performance.
@@ -57,6 +61,7 @@ class QueryService:
             page_size=page_size,
             sort_by=sort_by,
             sort_dir=sort_dir,
+            active_only=active_only,
         )
 
         # Check cache
@@ -107,6 +112,10 @@ class QueryService:
                     query = query.filter(Player.position == filters["position"])
             if "min_fantasy_points" in filters and include_projections:
                 query = query.filter(Projection.half_ppr >= filters["min_fantasy_points"])
+            if "status" in filters:
+                query = query.filter(Player.status == filters["status"])
+            if "exclude_no_team" in filters and filters["exclude_no_team"]:
+                query = query.filter(Player.team.isnot(None), Player.team != "", Player.team != "FA")
 
         # Add sorting
         if sort_by in ["name", "team", "position"]:
@@ -130,10 +139,75 @@ class QueryService:
 
         # Execute query
         players = query.all()
-
+        
+        # Apply active player filtering if requested
+        filtered_players = players
+        if active_only and players:
+            try:
+                # Determine which season to use for filtering
+                # This affects filtering behavior (stricter for current season)
+                filter_season = None
+                
+                # Check if filters contain a season parameter, regardless of projections
+                if filters and "season" in filters:
+                    filter_season = filters["season"]
+                    logger.debug(f"Using season {filter_season} for active player filtering")
+                
+                # Convert players to DataFrame for filtering
+                player_df = pd.DataFrame([
+                    {
+                        "display_name": p.name,
+                        "team_abbr": p.team,
+                        "position": p.position,
+                        "player_id": p.player_id,
+                        "status": p.status
+                    } 
+                    for p in players
+                ])
+                
+                # Add fantasy points for historical filtering if available
+                if include_projections:
+                    fantasy_points = []
+                    for p in players:
+                        # Find base projection
+                        base_proj = next((proj for proj in p.projections if proj.scenario_id is None), None)
+                        
+                        if base_proj and hasattr(base_proj, "half_ppr"):
+                            fantasy_points.append(safe_float(base_proj.half_ppr, 0.0))
+                        else:
+                            fantasy_points.append(0.0)
+                    
+                    # Add to DataFrame
+                    player_df["fantasy_points"] = fantasy_points
+                
+                # Filter active players with season awareness
+                if not player_df.empty:
+                    filtered_df = self.active_player_service.filter_active(
+                        player_df, 
+                        season=filter_season
+                    )
+                    
+                    # Log filtering results
+                    filtered_count = len(filtered_df) if not filtered_df.empty else 0
+                    original_count = len(player_df)
+                    logger.info(
+                        f"Active player filtering (season: {filter_season}): {filtered_count}/{original_count} "
+                        f"players retained ({original_count - filtered_count} filtered out)"
+                    )
+                    
+                    # Filter players list to only include active players
+                    if not filtered_df.empty:
+                        active_ids = set(filtered_df["player_id"].tolist())
+                        filtered_players = [p for p in players if p.player_id in active_ids]
+                    else:
+                        filtered_players = []
+            except Exception as e:
+                # Log error but continue with unfiltered players
+                logger.error(f"Error filtering active players: {str(e)}")
+        
         # Format result
         result: List[PlayerQueryResultDict] = []
-        for player in players:
+        for player in filtered_players:
             player_data: PlayerQueryResultDict = {
                 "player_id": player.player_id,
                 "name": player.name,
@@ -190,7 +264,8 @@ class QueryService:
         return result, total_count
 
     async def search_players(
-        self, search_term: str, position: Optional[str] = None, limit: int = 20
+        self, search_term: str, position: Optional[str] = None, limit: int = 20,
+        active_only: bool = True
     ) -> List[PlayerQueryResultDict]:
         """
         Search for players by name with autocomplete functionality.
@@ -205,7 +280,8 @@ class QueryService:
         """
         # Build cache key
         cache_key = self.cache.cache_key(
-            "player_search", search_term=search_term, position=position, limit=limit
+            "player_search", search_term=search_term, position=position, limit=limit,
+            active_only=active_only
         )
 
         # Check cache
@@ -228,6 +304,47 @@ class QueryService:
 
         # Execute query
         players = query.all()
+        
+        # Apply active player filtering if requested
+        filtered_players = players
+        if active_only and players:
+            try:
+                # Convert players to DataFrame for filtering
+                player_df = pd.DataFrame([
+                    {
+                        "display_name": p.name,
+                        "team_abbr": p.team,
+                        "position": p.position,
+                        "player_id": p.player_id,
+                        "status": p.status
+                    } 
+                    for p in players
+                ])
+                
+                # For search, we'll use the default filtering (current season)
+                # This errs on the side of including more recent players in search
+                
+                # Filter active players
+                if not player_df.empty:
+                    filtered_df = self.active_player_service.filter_active(player_df)
+                    
+                    # Log filtering results
+                    filtered_count = len(filtered_df) if not filtered_df.empty else 0
+                    original_count = len(player_df)
+                    logger.debug(
+                        f"Search active player filtering: {filtered_count}/{original_count} "
+                        f"players retained ({original_count - filtered_count} filtered out)"
+                    )
+                    
+                    # Filter players list to only include active players
+                    if not filtered_df.empty:
+                        active_ids = set(filtered_df["player_id"].tolist())
+                        filtered_players = [p for p in players if p.player_id in active_ids]
+                    else:
+                        filtered_players = []
+            except Exception as e:
+                # Log error but continue with unfiltered players
+                logger.error(f"Error filtering active players in search: {str(e)}")
 
         # Format result
         result = [
@@ -237,7 +354,7 @@ class QueryService:
                 "team": player.team,
                 "position": player.position,
             }
-            for player in players
+            for player in filtered_players
         ]
 
         # Cache the result

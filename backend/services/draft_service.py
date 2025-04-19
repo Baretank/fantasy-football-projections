@@ -201,8 +201,12 @@ class DraftService:
 
                 # Create projection for rookies if requested
                 if create_projection and player.is_rookie:
-                    # Current season
+                    # Get current season
                     current_season = datetime.now().year
+                    # Check if we're past the draft for this year's season
+                    # and should be projecting for next year
+                    if datetime.now().month >= 9:  # September or later
+                        current_season += 1
 
                     # Check for existing projection
                     existing = (

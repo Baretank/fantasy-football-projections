@@ -14,6 +14,8 @@ import { Input } from '@/components/ui/input';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import SeasonSelector from '@/components/ui/season-selector';
+import { SeasonProvider } from '@/context/SeasonContext';
 import { ScenarioService } from '@/services/api';
 
 const AppLayout: React.FC = () => {
@@ -23,8 +25,9 @@ const AppLayout: React.FC = () => {
   const [isCreatingProjection, setIsCreatingProjection] = useState(false);
   
   return (
-    <div className="flex min-h-screen bg-background">
-      {/* Sidebar */}
+    <SeasonProvider>
+      <div className="flex min-h-screen bg-background">
+        {/* Sidebar */}
       <div className="hidden md:flex flex-col border-r w-64">
         <div className="p-4">
           <h1 className="text-xl font-bold">FF Projections</h1>
@@ -62,6 +65,7 @@ const AppLayout: React.FC = () => {
             </div>
             
             <div className="flex items-center gap-3">
+              <SeasonSelector className="hidden md:block" />
               <ThemeToggle />
               <Button size="icon" variant="ghost">
                 <BellIcon className="h-5 w-5" />
@@ -101,6 +105,7 @@ const AppLayout: React.FC = () => {
       {/* Toast notifications */}
       <Toaster />
     </div>
+    </SeasonProvider>
   );
 };
 

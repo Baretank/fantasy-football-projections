@@ -7,6 +7,7 @@ from datetime import datetime
 
 from backend.database.models import Player, BaseStat, GameStats, ImportLog
 from backend.services.adapters.web_data_adapter import WebDataAdapter
+from backend.services.active_player_service import ActivePlayerService
 from backend.services.typing import ImportMetricsDict, DataImportResultDict, safe_float, safe_dict_get
 from backend.services.typing_pandas import TypedDataFrame, safe_series_get, series_to_float, series_to_int, series_to_str
 
@@ -21,17 +22,19 @@ class DataImportService:
     processes the data, and stores it in the database.
     """
 
-    def __init__(self, db: Session, logger=None):
+    def __init__(self, db: Session, logger=None, active_player_service=None):
         """
         Initialize the data import service.
 
         Args:
             db: SQLAlchemy database session
             logger: Optional logger instance
+            active_player_service: Optional ActivePlayerService instance
         """
         self.db = db
         self.logger = logger or logging.getLogger(__name__)
         self.web_data_adapter = WebDataAdapter()
+        self.active_player_service = active_player_service or ActivePlayerService()
 
         # Metrics tracking
         self.metrics: ImportMetricsDict = {
@@ -39,6 +42,7 @@ class DataImportService:
             "errors": 0,
             "players_processed": 0,
             "game_stats_processed": 0,
+            "players_filtered": 0,
             "start_time": None,
             "end_time": None,
         }
@@ -374,6 +378,50 @@ class DataImportService:
         points += safe_float(safe_dict_get(stats, "receptions", 0)) * 0.5  # 0.5 points per reception (half-PPR)
 
         return round(points, 1)
+
+    def filter_active_players(self, players_df: TypedDataFrame) -> TypedDataFrame:
+        """
+        Filter a DataFrame of players to include only active players.
+        
+        Args:
+            players_df: TypedDataFrame containing player information
+
+        Returns:
+            TypedDataFrame with only active players
+        """
+        if players_df is None or players_df.is_empty():
+            return players_df
+            
+        try:
+            # Convert TypedDataFrame to standard DataFrame for filtering
+            df = players_df.df
+            
+            # Skip filtering if key columns missing
+            if 'display_name' not in df.columns or 'team_abbr' not in df.columns:
+                self.logger.warning("Cannot filter active players: required columns missing")
+                return players_df
+                
+            # Apply active player filtering
+            original_count = len(df)
+            filtered_df = self.active_player_service.filter_active(df)
+            filtered_count = len(filtered_df)
+            
+            # Update metrics and log results
+            players_filtered = original_count - filtered_count
+            self.metrics["players_filtered"] += players_filtered
+            
+            self.logger.info(
+                f"Active player filtering: {filtered_count}/{original_count} "
+                f"players retained ({players_filtered} filtered out)"
+            )
+            
+            # Return new TypedDataFrame with filtered data
+            return TypedDataFrame(filtered_df)
+            
+        except Exception as e:
+            self.logger.error(f"Error filtering active players: {str(e)}")
+            # Return original data on error
+            return players_df
 
     def _log_import(self, operation: str, status: str, message: str, details: Dict = None) -> None:
         """

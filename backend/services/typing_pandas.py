@@ -88,14 +88,10 @@ def series_to_str(series: Series, key: str, default: str = "") -> str:
     return str(value)
 
 
-@runtime_checkable
-class Sized(Protocol):
-    """Protocol for objects that have a __len__ method."""
-
-    def __len__(self) -> int: ...
-
-
-class TypedDataFrame(Generic[T], Sized):
+# The Sized protocol is already defined in typing.Sized
+# or can be defined as a Protocol, but we don't need to inherit from it
+# directly since we're implementing __len__
+class TypedDataFrame(Generic[T]):
     """A wrapper for pandas DataFrame with typed column access methods."""
 
     def __init__(self, df: DataFrame):

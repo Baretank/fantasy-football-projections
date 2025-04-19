@@ -50,6 +50,10 @@ def create_indexes(conn, force=False):
             "ix_players_position_status",
         ),
         (
+            "CREATE INDEX IF NOT EXISTS ix_players_fantasy_relevant ON players(position, status, team);",
+            "ix_players_fantasy_relevant",
+        ),
+        (
             "CREATE INDEX IF NOT EXISTS ix_players_team_position ON players(team, position);",
             "ix_players_team_position",
         ),
@@ -243,6 +247,10 @@ def run_query_tests(conn):
         {
             "name": "Players by position",
             "query": "SELECT * FROM players WHERE position = 'QB';",
+        },
+        {
+            "name": "Fantasy-relevant players",
+            "query": "SELECT * FROM players WHERE position IN ('QB', 'RB', 'WR', 'TE') AND status = 'Active' AND team IS NOT NULL AND team != '' AND team != 'FA';",
         },
         {
             "name": "Projections by player and season",

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Logger } from '@/utils/logger';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,7 +10,8 @@ import {
   ArrowsRightLeftIcon,
   TrashIcon,
   ArrowPathIcon,
-  PlusIcon
+  PlusIcon,
+  ArrowRightIcon
 } from '@heroicons/react/24/outline';
 import {
   BarChart, 
@@ -27,18 +28,25 @@ import {
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
-  Radar
+  Radar,
+  ComposedChart,
+  ErrorBar,
+  ReferenceLine
 } from 'recharts';
 import { ScenarioService, PlayerService, ProjectionService } from '@/services/api';
 import { Player, Projection, Scenario } from '@/types/index';
+import ProjectionRangeChart from '@/components/visualization/ProjectionRangeChart';
+import { useToast } from '@/components/ui/use-toast';
 
 const ComparePage: React.FC = () => {
+  const { toast } = useToast();
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [playerData, setPlayerData] = useState<Record<string, any>>({});
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [projectionRangeData, setProjectionRangeData] = useState<any[]>([]);
   
   // Fetch scenarios on component mount
   useEffect(() => {
@@ -56,11 +64,16 @@ const ComparePage: React.FC = () => {
         }
       } catch (err) {
         Logger.error("Error fetching scenarios:", err);
+        toast({
+          title: "Error",
+          description: "Failed to load scenarios. Please try again.",
+          variant: "destructive"
+        });
       }
     }
     
     fetchScenarios();
-  }, []);
+  }, [toast]);
   
   // Load player data when selection changes
   useEffect(() => {
@@ -72,10 +85,30 @@ const ComparePage: React.FC = () => {
       
       try {
         const newPlayerData: Record<string, any> = {};
+        const newRangeData: any[] = [];
         
         for (const playerId of selectedPlayers) {
           if (playerData[playerId]) {
             newPlayerData[playerId] = playerData[playerId];
+            
+            // Add existing player to range data if not already there
+            const existingPlayer = playerData[playerId];
+            const playerInRange = projectionRangeData.some(p => p.playerId === playerId);
+            
+            if (!playerInRange && existingPlayer.projection) {
+              newRangeData.push({
+                name: existingPlayer.name,
+                position: existingPlayer.position,
+                team: existingPlayer.team,
+                playerId: playerId,
+                value: existingPlayer.projection.half_ppr || 0,
+                range: {
+                  low: existingPlayer.range?.low?.half_ppr || 0,
+                  high: existingPlayer.range?.high?.half_ppr || 0
+                }
+              });
+            }
+            
             continue;
           }
           
@@ -88,11 +121,31 @@ const ComparePage: React.FC = () => {
             selectedScenario
           );
           
+          if (!projections || projections.length === 0) {
+            toast({
+              title: "No Projection",
+              description: `No projection found for ${player.name} in the selected scenario.`,
+              variant: "default"
+            });
+            continue;
+          }
+          
           // Get projection range (confidence intervals)
-          const range = await ProjectionService.getProjectionRange(
-            projections[0].projection_id,
-            0.80
-          );
+          let range = null;
+          try {
+            range = await ProjectionService.getProjectionRange(
+              projections[0].projection_id,
+              0.80
+            );
+          } catch (rangeErr) {
+            Logger.warn(`Could not get range for ${player.name}:`, rangeErr);
+            // Create a default range if API fails
+            const halfPpr = projections[0].half_ppr || 0;
+            range = {
+              low: { half_ppr: halfPpr * 0.8 },
+              high: { half_ppr: halfPpr * 1.2 }
+            };
+          }
           
           // Store combined data
           newPlayerData[playerId] = {
@@ -100,35 +153,68 @@ const ComparePage: React.FC = () => {
             projection: projections[0],
             range
           };
+          
+          // Add to range data for visualization
+          newRangeData.push({
+            name: player.name,
+            position: player.position,
+            team: player.team,
+            playerId: playerId,
+            value: projections[0].half_ppr || 0,
+            range: {
+              low: range?.low?.half_ppr || 0,
+              high: range?.high?.half_ppr || 0
+            }
+          });
         }
         
         setPlayerData({ ...playerData, ...newPlayerData });
+        setProjectionRangeData([...projectionRangeData, ...newRangeData]);
       } catch (err) {
         Logger.error("Error fetching player data:", err);
         setError("Failed to load player data. Please try again.");
+        
+        toast({
+          title: "Error",
+          description: "Failed to load player data. Please try again.",
+          variant: "destructive"
+        });
       } finally {
         setIsLoading(false);
       }
     }
     
     fetchPlayerData();
-  }, [selectedPlayers, selectedScenario]);
+  }, [selectedPlayers, selectedScenario, toast, playerData, projectionRangeData]);
   
   // Handle adding a player to comparison
   const handleAddPlayer = (playerId: string) => {
-    if (selectedPlayers.includes(playerId)) return;
-    
-    // Limit to 4 players for comparison
-    if (selectedPlayers.length >= 4) {
-      setSelectedPlayers([...selectedPlayers.slice(1), playerId]);
-    } else {
-      setSelectedPlayers([...selectedPlayers, playerId]);
+    if (selectedPlayers.includes(playerId)) {
+      toast({
+        title: "Already Selected",
+        description: "This player is already in your comparison.",
+        variant: "default"
+      });
+      return;
     }
+    
+    // Limit to 6 players for comparison
+    if (selectedPlayers.length >= 6) {
+      toast({
+        title: "Limit Reached",
+        description: "You can compare up to 6 players at once. Remove a player before adding another.",
+        variant: "default"
+      });
+      return;
+    }
+    
+    setSelectedPlayers([...selectedPlayers, playerId]);
   };
   
   // Handle removing a player from comparison
   const handleRemovePlayer = (playerId: string) => {
     setSelectedPlayers(selectedPlayers.filter(id => id !== playerId));
+    setProjectionRangeData(projectionRangeData.filter(p => p.playerId !== playerId));
   };
   
   // Get all players with data loaded
@@ -164,17 +250,20 @@ const ComparePage: React.FC = () => {
     const players = getLoadedPlayers();
     if (players.length === 0) return [];
     
-    // Normalize all stats to 0-100 scale
+    // Define position-specific metrics
     const statKeys = [
-      { key: 'half_ppr', label: 'Fantasy Pts' },
+      { key: 'half_ppr', label: 'Fantasy Pts', posFilter: ['QB', 'RB', 'WR', 'TE'] },
       // QB stats
       { key: 'pass_yards', label: 'Pass Yards', posFilter: ['QB'] },
       { key: 'pass_td', label: 'Pass TD', posFilter: ['QB'] },
+      { key: 'completions', label: 'Completions', posFilter: ['QB'] },
       // RB stats
       { key: 'rush_yards', label: 'Rush Yards', posFilter: ['RB', 'QB'] },
       { key: 'rush_td', label: 'Rush TD', posFilter: ['RB', 'QB'] },
+      { key: 'rush_att', label: 'Rush Att', posFilter: ['RB', 'QB'] },
       // Receiving stats
       { key: 'targets', label: 'Targets', posFilter: ['WR', 'TE', 'RB'] },
+      { key: 'receptions', label: 'Receptions', posFilter: ['WR', 'TE', 'RB'] },
       { key: 'rec_yards', label: 'Rec Yards', posFilter: ['WR', 'TE', 'RB'] },
       { key: 'rec_td', label: 'Rec TD', posFilter: ['WR', 'TE', 'RB'] }
     ];
@@ -214,8 +303,23 @@ const ComparePage: React.FC = () => {
   
   // Get color for a player (consistent across charts)
   const getPlayerColor = (index: number) => {
-    const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300'];
+    const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00C49F', '#FFBB28'];
     return colors[index % colors.length];
+  };
+  
+  // Handle scenario change
+  const handleScenarioChange = (scenarioId: string) => {
+    setSelectedScenario(scenarioId);
+    
+    // Clear existing projection data when scenario changes
+    setPlayerData({});
+    setProjectionRangeData([]);
+    
+    toast({
+      title: "Scenario Changed",
+      description: "Projections will be loaded for the new scenario.",
+      variant: "default"
+    });
   };
   
   return (
@@ -239,7 +343,7 @@ const ComparePage: React.FC = () => {
           <select
             className="border rounded py-2 px-3 bg-background"
             value={selectedScenario || ''}
-            onChange={(e) => setSelectedScenario(e.target.value)}
+            onChange={(e) => handleScenarioChange(e.target.value)}
           >
             <option value="" disabled>
               Select Scenario
@@ -256,8 +360,38 @@ const ComparePage: React.FC = () => {
       
       <Separator />
       
+      {/* Projection Range Chart */}
+      {projectionRangeData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Fantasy Point Comparison</CardTitle>
+            <CardDescription>
+              Projected half-PPR points with 80% confidence intervals
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[400px]">
+              <ProjectionRangeChart 
+                data={projectionRangeData}
+                yAxisLabel="Half PPR Points"
+                height="100%"
+                showAverage={true}
+              />
+            </div>
+          </CardContent>
+          <CardFooter className="flex justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing projections with uncertainty ranges for selected players
+            </p>
+            <Button variant="outline" size="sm" onClick={() => setProjectionRangeData([])}>
+              Clear Chart
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
+      
       {/* Player cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {selectedPlayers.map((playerId, index) => {
           const player = playerData[playerId];
           const isLoaded = !!player;
@@ -335,12 +469,12 @@ const ComparePage: React.FC = () => {
                               {player.projection.pass_td?.toFixed(1)}
                             </div>
                             <div>
-                              <span className="text-muted-foreground">Rush:</span>{' '}
-                              {player.projection.rush_yards?.toFixed(0)} yds
+                              <span className="text-muted-foreground">Comp/Att:</span>{' '}
+                              {player.projection.completions?.toFixed(0)}/{player.projection.pass_attempts?.toFixed(0)}
                             </div>
                             <div>
-                              <span className="text-muted-foreground">Rush TDs:</span>{' '}
-                              {player.projection.rush_td?.toFixed(1)}
+                              <span className="text-muted-foreground">Rush:</span>{' '}
+                              {player.projection.rush_yards?.toFixed(0)} yds
                             </div>
                           </div>
                         </>
@@ -358,8 +492,16 @@ const ComparePage: React.FC = () => {
                               {player.projection.rush_td?.toFixed(1)}
                             </div>
                             <div>
+                              <span className="text-muted-foreground">Attempts:</span>{' '}
+                              {player.projection.rush_att?.toFixed(0)}
+                            </div>
+                            <div>
                               <span className="text-muted-foreground">Rec:</span>{' '}
-                              {player.projection.rec_yards?.toFixed(0)} yds
+                              {player.projection.receptions?.toFixed(0)}/{player.projection.targets?.toFixed(0)}
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Rec Yards:</span>{' '}
+                              {player.projection.rec_yards?.toFixed(0)}
                             </div>
                             <div>
                               <span className="text-muted-foreground">Rec TDs:</span>{' '}
@@ -374,19 +516,21 @@ const ComparePage: React.FC = () => {
                           <div className="grid grid-cols-2 gap-2 text-sm">
                             <div>
                               <span className="text-muted-foreground">Rec:</span>{' '}
-                              {player.projection.rec_yards?.toFixed(0)} yds
+                              {player.projection.receptions?.toFixed(0)}/{player.projection.targets?.toFixed(0)}
                             </div>
                             <div>
-                              <span className="text-muted-foreground">Rec TDs:</span>{' '}
+                              <span className="text-muted-foreground">Yards:</span>{' '}
+                              {player.projection.rec_yards?.toFixed(0)}
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">TDs:</span>{' '}
                               {player.projection.rec_td?.toFixed(1)}
                             </div>
                             <div>
-                              <span className="text-muted-foreground">Targets:</span>{' '}
-                              {player.projection.targets?.toFixed(0)}
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Receptions:</span>{' '}
-                              {player.projection.receptions?.toFixed(0)}
+                              <span className="text-muted-foreground">YPR:</span>{' '}
+                              {player.projection.receptions > 0 
+                                ? (player.projection.rec_yards / player.projection.receptions).toFixed(1) 
+                                : '0.0'}
                             </div>
                           </div>
                         </>
@@ -395,15 +539,10 @@ const ComparePage: React.FC = () => {
                   </div>
                 ) : (
                   <div className="h-32 flex items-center justify-center">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="text-muted-foreground"
-                      disabled
-                    >
+                    <div className="flex items-center text-muted-foreground">
                       <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />
                       Loading player data...
-                    </Button>
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -412,7 +551,7 @@ const ComparePage: React.FC = () => {
         })}
         
         {/* Empty card for adding players */}
-        {selectedPlayers.length < 4 && (
+        {selectedPlayers.length < 6 && (
           <Card className="border-dashed flex items-center justify-center">
             <CardContent className="p-6">
               <div className="text-center">
@@ -437,77 +576,60 @@ const ComparePage: React.FC = () => {
       </div>
       
       {/* Comparison Charts */}
-      {getLoadedPlayers().length > 0 && (
+      {getLoadedPlayers().length > 1 && (
         <div className="space-y-6">
-          <Tabs defaultValue="fantasy" className="w-full">
+          <Tabs defaultValue="radar" className="w-full">
             <TabsList>
-              <TabsTrigger value="fantasy">Fantasy Points</TabsTrigger>
+              <TabsTrigger value="radar">Performance Radar</TabsTrigger>
               <TabsTrigger value="yards">Yardage</TabsTrigger>
               <TabsTrigger value="touchdowns">Touchdowns</TabsTrigger>
-              <TabsTrigger value="radar">Radar Comparison</TabsTrigger>
+              <TabsTrigger value="efficiency">Efficiency Metrics</TabsTrigger>
             </TabsList>
             
-            <TabsContent value="fantasy" className="mt-4">
+            <TabsContent value="radar" className="mt-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Fantasy Point Comparison</CardTitle>
+                  <CardTitle>Performance Radar</CardTitle>
                   <CardDescription>
-                    Compare projected fantasy points with uncertainty ranges
+                    Relative strengths across key metrics (normalized to 0-100 scale)
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={getComparisonData('half_ppr', 'Fantasy Points')}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 40 }}
+                    <RadarChart 
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={150}
+                      width={500} 
+                      height={500} 
+                      data={getRadarData()}
                     >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis 
-                        dataKey="name" 
-                        tick={{ fontSize: 12 }}
-                        angle={-45}
-                        textAnchor="end"
-                      />
-                      <YAxis 
-                        label={{ 
-                          value: 'Half PPR Fantasy Points', 
-                          angle: -90, 
-                          position: 'insideLeft' 
-                        }}
-                      />
-                      <Tooltip
-                        formatter={(value, name) => {
-                          if (name === 'value') return [Number(value).toFixed(1), 'Projection'];
-                          if (name === 'rangeLow') return [Number(value).toFixed(1), 'Low Range'];
-                          if (name === 'rangeHigh') return [Number(value).toFixed(1), 'High Range'];
-                          return [value, name];
-                        }}
-                        labelFormatter={(label) => label}
-                      />
+                      <PolarGrid />
+                      <PolarAngleAxis dataKey="name" />
+                      <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                      
+                      {getLoadedPlayers().map((player, index) => {
+                        const keyToUse = player.position === 'QB' 
+                          ? 'Pass Yards' 
+                          : player.position === 'RB'
+                            ? 'Rush Yards'
+                            : 'Rec Yards';
+                        
+                        return (
+                          <Radar
+                            key={player.player_id}
+                            name={player.name}
+                            dataKey={keyToUse}
+                            stroke={getPlayerColor(index)}
+                            fill={getPlayerColor(index)}
+                            fillOpacity={0.6}
+                          />
+                        );
+                      })}
+                      
                       <Legend />
-                      <Bar 
-                        dataKey="value" 
-                        name="Projected Points" 
-                        fill="#8884d8"
-                        radius={[4, 4, 0, 0]}
-                      />
-                      <Bar 
-                        dataKey="rangeLow" 
-                        name="Low Range" 
-                        fill="#ffc658"
-                        radius={[4, 4, 0, 0]}
-                        stackId="range"
-                        style={{ opacity: 0.4 }}
-                      />
-                      <Bar 
-                        dataKey="rangeHigh" 
-                        name="High Range" 
-                        fill="#82ca9d"
-                        radius={[4, 4, 0, 0]}
-                        stackId="range"
-                        style={{ opacity: 0.4 }}
-                      />
-                    </BarChart>
+                      <Tooltip />
+                    </RadarChart>
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
@@ -599,40 +721,77 @@ const ComparePage: React.FC = () => {
               </Card>
             </TabsContent>
             
-            <TabsContent value="radar" className="mt-4">
+            <TabsContent value="efficiency" className="mt-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Performance Radar</CardTitle>
+                  <CardTitle>Efficiency Metrics</CardTitle>
                   <CardDescription>
-                    Relative strengths across key metrics (normalized to 0-100 scale)
+                    Compare key efficiency stats by position
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart 
-                      outerRadius={90} 
-                      width={730} 
-                      height={250} 
-                      data={getRadarData()}
+                    <BarChart
+                      data={getLoadedPlayers().map(player => {
+                        // Different efficiency metrics by position
+                        let effStat = 0;
+                        let effLabel = '';
+                        
+                        if (player.position === 'QB') {
+                          // Yards per attempt
+                          effStat = player.projection.pass_attempts > 0 
+                            ? player.projection.pass_yards / player.projection.pass_attempts 
+                            : 0;
+                          effLabel = 'Yards/Att';
+                        } else if (player.position === 'RB') {
+                          // Yards per carry
+                          effStat = player.projection.rush_att > 0 
+                            ? player.projection.rush_yards / player.projection.rush_att 
+                            : 0;
+                          effLabel = 'Yards/Carry';
+                        } else {
+                          // Yards per reception
+                          effStat = player.projection.receptions > 0 
+                            ? player.projection.rec_yards / player.projection.receptions 
+                            : 0;
+                          effLabel = 'Yards/Rec';
+                        }
+                        
+                        return {
+                          name: player.name,
+                          position: player.position,
+                          team: player.team,
+                          value: effStat,
+                          label: effLabel
+                        };
+                      })}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 40 }}
                     >
-                      <PolarGrid />
-                      <PolarAngleAxis dataKey="name" />
-                      <PolarRadiusAxis angle={30} domain={[0, 100]} />
-                      
-                      {getLoadedPlayers().map((player, index) => (
-                        <Radar
-                          key={player.player_id}
-                          name={player.name}
-                          dataKey={player.position === 'QB' ? 'Pass Yards' : 'Rec Yards'}
-                          stroke={getPlayerColor(index)}
-                          fill={getPlayerColor(index)}
-                          fillOpacity={0.6}
-                        />
-                      ))}
-                      
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis 
+                        label={{ 
+                          value: 'Efficiency', 
+                          angle: -90, 
+                          position: 'insideLeft' 
+                        }}
+                      />
+                      <Tooltip
+                        formatter={(value, name, props) => {
+                          if (name === 'value') {
+                            return [Number(value).toFixed(2), props.payload.label];
+                          }
+                          return [value, name];
+                        }}
+                        labelFormatter={(label) => label}
+                      />
                       <Legend />
-                      <Tooltip />
-                    </RadarChart>
+                      <Bar 
+                        dataKey="value" 
+                        name="Efficiency" 
+                        fill="#8884d8"
+                      />
+                    </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
@@ -650,7 +809,7 @@ const ComparePage: React.FC = () => {
               <h3 className="text-lg font-medium">No Players Selected</h3>
               <p className="text-muted-foreground max-w-md mx-auto">
                 Add players to compare their projections, stats, and potential ranges.
-                Select up to 4 players to compare side-by-side.
+                Select up to 6 players to compare side-by-side.
               </p>
               <div className="pt-4">
                 <PlayerSelect

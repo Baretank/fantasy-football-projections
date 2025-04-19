@@ -30,13 +30,16 @@ async def get_players(
     name: Optional[str] = None,
     team: Optional[str] = None,
     position: Optional[str] = None,
+    status: Optional[str] = None,
+    season: Optional[int] = None,  # Added season parameter for filtering
     include_projections: bool = False,
     include_stats: bool = False,
     min_fantasy_points: Optional[float] = None,
     page: int = Query(1, gt=0),
-    page_size: int = Query(20, gt=0, le=100),
+    page_size: int = Query(20, gt=0, le=10000),  # Much larger maximum to avoid artificial limits
     sort_by: str = "name",
     sort_dir: str = Query("asc", pattern="^(asc|desc)$"),
+    team_filter: bool = False,  # Filter out players without teams
     db: Session = Depends(get_db),
 ):
     """
@@ -44,6 +47,11 @@ async def get_players(
 
     Optimized endpoint with pagination, sorting, and filtering options.
     Can include projection and statistical data for each player.
+    The team_filter parameter when true will exclude players without teams.
+    
+    Different season values affect active player filtering:
+    - 2023, 2024: Shows historical players with fantasy points > 0
+    - 2025+: Shows current active players based on active_players.csv
     """
     service = QueryService(db)
 
@@ -54,9 +62,33 @@ async def get_players(
     if team:
         filters["team"] = team
     if position:
-        filters["position"] = position
+        # Handle comma-separated list of positions
+        if ',' in position:
+            positions = position.split(',')
+            # Clean up any whitespace
+            positions = [pos.strip() for pos in positions if pos.strip()]
+            filters["position"] = positions
+        else:
+            filters["position"] = position
+    if status:
+        filters["status"] = status
     if min_fantasy_points:
         filters["min_fantasy_points"] = min_fantasy_points
+    
+    # Add season filtering - this is critical for proper active player filtering
+    # Different behavior based on season value:
+    # - 2023/2024: Historical seasons - include players with fantasy points > 0
+    # - 2025+: Current season - use active_players.csv for filtering
+    if season:
+        filters["season"] = season
+        if season < 2025:
+            logger.info(f"Filtering players for historical season {season} - will include players with historical stats")
+        else:
+            logger.info(f"Filtering players for current season {season} - will use active_players.csv roster")
+    
+    # Only include players on teams (exclude FA/free agents)
+    if team_filter:
+        filters["exclude_no_team"] = True
 
     # Get players with pagination
     players, total_count = await service.get_players_optimized(

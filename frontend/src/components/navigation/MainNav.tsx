@@ -57,6 +57,12 @@ const navigation: NavItem[] = [
     description: 'Side-by-side comparisons'
   },
   {
+    name: 'Visualizations',
+    href: '/visualizations',
+    icon: <AdjustmentsHorizontalIcon className="h-5 w-5" />,
+    description: 'Charts and visualizations'
+  },
+  {
     name: 'Settings',
     href: '/settings',
     icon: <Cog6ToothIcon className="h-5 w-5" />,

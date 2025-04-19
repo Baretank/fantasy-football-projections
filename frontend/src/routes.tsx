@@ -7,6 +7,7 @@ import AppLayout from '@/components/layout/AppLayout';
 // Pages
 import DashboardPage from '@/pages/DashboardPage';
 import ComparePage from '@/pages/ComparePage';
+import VisualizationsPage from '@/pages/VisualizationsPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
 // Legacy Components (to be migrated to full pages)
@@ -40,6 +41,10 @@ const router = createBrowserRouter([
       {
         path: 'compare',
         element: <ComparePage />
+      },
+      {
+        path: 'visualizations',
+        element: <VisualizationsPage />
       },
       {
         path: 'settings',

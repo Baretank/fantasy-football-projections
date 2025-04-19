@@ -1,463 +1,571 @@
 import React, { useState, useEffect } from 'react';
 import { Logger } from '@/utils/logger';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { 
-  BarChart, 
-  Bar, 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
-  ResponsiveContainer, 
-  PieChart, 
-  Pie, 
-  Cell 
-} from 'recharts';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
-import { 
-  PlayerService, 
-  ProjectionService, 
-  ScenarioService 
-} from '@/services/api';
-import { Player, Projection, Scenario } from '@/types/index';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ArrowUpIcon, ArrowDownIcon, MagnifyingGlassIcon, ArrowsUpDownIcon } from '@heroicons/react/24/outline';
+import { PlayerService, ScenarioService } from '@/services/api';
+import { Player, Projection, Scenario, STAT_FORMATS } from '@/types/index';
+import { useSeason } from '@/context/SeasonContext';
 
 const Dashboard: React.FC = () => {
-  // State management for scenarios and top projections
-  const [scenarios, setScenarios] = useState<Scenario[]>([]);
-  const [topProjections, setTopProjections] = useState<Record<string, Projection[]>>({});
+  // Get the current season from context
+  const { season } = useSeason();
+  
+  // State management
   const [players, setPlayers] = useState<Player[]>([]);
-  const [baselineScenario, setBaselineScenario] = useState<Scenario | null>(null);
+  const [projections, setProjections] = useState<{ [key: string]: Projection }>({});
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [positionDistribution, setPositionDistribution] = useState<any[]>([]);
-  const [teamDistribution, setTeamDistribution] = useState<any[]>([]);
-
-  // Colors for charts
-  const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088FE', '#00C49F'];
-
-  // Fetch data on component mount
+  const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [sortField, setSortField] = useState<string>('half_ppr');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [positionFilter, setPositionFilter] = useState<string>('ALL');
+  const [teamFilter, setTeamFilter] = useState<string>('ALL');
+  const [availableTeams, setAvailableTeams] = useState<string[]>([]);
+  
+  // Fetch data when component mounts or when season changes
   useEffect(() => {
     async function fetchData() {
       try {
         setIsLoading(true);
         setError(null);
         
-        // Fetch all players first
-        const playersData = await PlayerService.getPlayers();
-        setPlayers(playersData);
+        // Log the current season being used
+        Logger.info(`Dashboard: Loading data for season ${season}`);
         
-        // Calculate position distribution
-        const positionCounts: Record<string, number> = {};
-        playersData.forEach(player => {
-          positionCounts[player.position] = (positionCounts[player.position] || 0) + 1;
-        });
-        
-        setPositionDistribution(
-          Object.entries(positionCounts).map(([position, count], index) => ({
-            name: position,
-            value: count,
-            color: COLORS[index % COLORS.length]
-          }))
-        );
-        
-        // Calculate team distribution
-        const teamCounts: Record<string, number> = {};
-        playersData.forEach(player => {
-          teamCounts[player.team] = (teamCounts[player.team] || 0) + 1;
-        });
-        
-        // Sort teams by player count
-        setTeamDistribution(
-          Object.entries(teamCounts)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 10)
-            .map(([team, count], index) => ({
-              name: team,
-              players: count
-            }))
-        );
-        
-        // Fetch all scenarios
+        // Fetch all scenarios first
         const scenariosData = await ScenarioService.getScenarios();
-        setScenarios(scenariosData);
+        setScenarios(Array.isArray(scenariosData) ? scenariosData : []);
         
         // Find baseline scenario
-        const baseline = scenariosData.find(s => s.is_baseline) || scenariosData[0];
-        setBaselineScenario(baseline);
-        
-        // For the selected/default scenario, get top projections by position
-        if (baseline) {
-          const byPosition: Record<string, Projection[]> = {};
+        const baseline = Array.isArray(scenariosData) && scenariosData.length > 0 
+          ? scenariosData.find(s => s.is_baseline) || scenariosData[0]
+          : null;
           
-          // Fetch top projections for each position
-          for (const position of ['QB', 'RB', 'WR', 'TE']) {
-            try {
-              // Get projections for this position in the baseline scenario
-              const projections = await ScenarioService.getScenarioProjections(
-                baseline.scenario_id,
-                position
-              );
+        if (baseline) {
+          setSelectedScenario(baseline.scenario_id);
+        }
+        
+        // Fetch all players that match fantasy-relevant positions for the current season
+        Logger.info(`Dashboard: Fetching all fantasy-relevant players for season ${season}`);
+        
+        // Don't use status filter since the database has different status codes
+        const fantasyPositions = ['QB', 'RB', 'WR', 'TE'];
+        
+        // Always explicitly pass the season parameter to ensure correct filtering
+        Logger.info(`Dashboard: Explicitly using season ${season} for player filtering`);
+        
+        // Fetch all players with season parameter and filter by position client-side
+        const allPlayersData = await PlayerService.getPlayers(undefined, undefined, undefined, season);
+        
+        Logger.info(`Dashboard: Received ${allPlayersData?.length || 0} players from API for season ${season}`);
+        
+        const fantasyPlayers = Array.isArray(allPlayersData) 
+          ? allPlayersData.filter(p => p && p.position && fantasyPositions.includes(p.position))
+          : Array.isArray(allPlayersData?.players)
+              ? allPlayersData.players.filter(p => p && p.position && fantasyPositions.includes(p.position))
+              : [];
               
-              // Sort by half PPR points
-              const sorted = projections
-                .sort((a, b) => b.half_ppr - a.half_ppr)
-                .slice(0, 10);
-                
-              byPosition[position] = sorted;
-            } catch (posError) {
-              Logger.error(`Error fetching ${position} projections:`, posError);
-              byPosition[position] = [];
-            }
+        Logger.info(`Dashboard: Filtered to ${fantasyPlayers.length} fantasy players for season ${season}`);
+        
+        // Use the filtered players
+        const playersData = fantasyPlayers
+        
+        Logger.info(`Dashboard: Received ${Array.isArray(playersData) ? playersData.length : 'unknown'} players`);
+        
+        // Ensure we always set an array for players
+        setPlayers(Array.isArray(playersData) ? playersData : []);
+        
+        // Extract unique teams
+        if (Array.isArray(playersData)) {
+          const teams = Array.from(new Set(playersData.map(p => p.team).filter(Boolean)));
+          teams.sort();
+          setAvailableTeams(teams);
+        }
+        
+        // If we have a baseline scenario, fetch projections
+        if (baseline) {
+          // Fetch projections for this scenario
+          const allProjections = await ScenarioService.getScenarioProjections(baseline.scenario_id);
+          
+          // Create a lookup map for quick access
+          const projectionsMap: { [key: string]: Projection } = {};
+          if (Array.isArray(allProjections)) {
+            allProjections.forEach(proj => {
+              if (proj && proj.player_id) {
+                projectionsMap[proj.player_id] = proj;
+              }
+            });
           }
           
-          setTopProjections(byPosition);
+          setProjections(projectionsMap);
         }
       } catch (err) {
         Logger.error("Error fetching dashboard data:", err);
-        setError("Failed to load dashboard data. Please try again later.");
+        setError("Failed to load data. Please try again later.");
       } finally {
         setIsLoading(false);
       }
     }
     
     fetchData();
-  }, []);
-
-  // Get player name from ID
-  const getPlayerName = (playerId: string): string => {
-    const player = players.find(p => p.player_id === playerId);
-    return player ? player.name : 'Unknown Player';
-  };
-
-  // Get player team from ID
-  const getPlayerTeam = (playerId: string): string => {
-    const player = players.find(p => p.player_id === playerId);
-    return player ? player.team : '';
-  };
-
-  // Calculate total fantasy points by position
-  const getPositionFantasyPoints = () => {
-    const result: any[] = [];
+  }, [season]); // Re-fetch data when season changes
+  
+  // Handle scenario change
+  const handleScenarioChange = async (scenarioId: string) => {
+    if (!scenarioId) return;
     
-    for (const [position, projections] of Object.entries(topProjections)) {
-      const totalPoints = projections.reduce((sum, proj) => sum + proj.half_ppr, 0);
-      const avgPoints = projections.length > 0 ? totalPoints / projections.length : 0;
+    try {
+      setIsLoading(true);
+      setSelectedScenario(scenarioId);
       
-      result.push({
-        position,
-        totalPoints,
-        avgPoints,
-        playerCount: projections.length
-      });
+      // Fetch projections for this scenario
+      const allProjections = await ScenarioService.getScenarioProjections(scenarioId);
+      
+      // Create a lookup map
+      const projectionsMap: { [key: string]: Projection } = {};
+      if (Array.isArray(allProjections)) {
+        allProjections.forEach(proj => {
+          if (proj && proj.player_id) {
+            projectionsMap[proj.player_id] = proj;
+          }
+        });
+      }
+      
+      setProjections(projectionsMap);
+    } catch (err) {
+      Logger.error("Error fetching scenario projections:", err);
+      setError("Failed to load scenario projections.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Handle sort change
+  const handleSortChange = (field: string) => {
+    if (sortField === field) {
+      // Toggle direction if same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New field, set to descending by default
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+  
+  // Filter and sort players
+  const getFilteredAndSortedPlayers = () => {
+    // Ensure players is an array before trying to filter it
+    if (!players || !Array.isArray(players) || players.length === 0) {
+      Logger.debug("getFilteredAndSortedPlayers: No players to filter!");
+      return [];
     }
     
-    return result;
+    Logger.debug(`getFilteredAndSortedPlayers: Starting with ${players.length} players`);
+    
+    // Check player types
+    const samplePlayers = players.slice(0, 3);
+    Logger.debug("Sample players:", samplePlayers);
+    
+    // Apply filters
+    const filteredPlayers = players.filter(player => {
+      if (!player) {
+        Logger.debug("Found null/undefined player in array");
+        return false;
+      }
+      
+      // Search filter
+      const matchesSearch = searchTerm === '' || 
+        (player.name && player.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      // Position filter
+      const matchesPosition = positionFilter === 'ALL' || 
+        player.position === positionFilter;
+      
+      // Team filter
+      const matchesTeam = teamFilter === 'ALL' || 
+        player.team === teamFilter;
+      
+      const matches = matchesSearch && matchesPosition && matchesTeam;
+      return matches;
+    });
+    
+    Logger.debug(`getFilteredAndSortedPlayers: After filtering: ${filteredPlayers.length} players`);
+    
+    return filteredPlayers
+      .sort((a, b) => {
+        // Sort based on projection stats
+        const projA = projections[a.player_id];
+        const projB = projections[b.player_id];
+        
+        // Default to player name if no projections or different sort field
+        if (!projA && !projB) {
+          return (a.name || '').localeCompare(b.name || '');
+        }
+        
+        if (!projA) return 1; // Push players without projections to end
+        if (!projB) return -1;
+        
+        // Sort by the selected field
+        const valueA = projA[sortField as keyof Projection] as number || 0;
+        const valueB = projB[sortField as keyof Projection] as number || 0;
+        
+        return sortDirection === 'asc' 
+          ? valueA - valueB 
+          : valueB - valueA;
+      });
   };
 
+  // Determine the columns to show based on position filter
+  const getColumnsForPosition = (position: string) => {
+    if (position === 'QB') {
+      return [
+        // Fantasy points
+        'half_ppr',
+        // Game info
+        'games',
+        // Passing stats
+        'pass_attempts', 'completions', 'pass_yards', 'pass_td', 'interceptions',
+        'sacks', 'sack_yards', 'gross_pass_yards', 'net_pass_yards',
+        // Rushing stats
+        'rush_attempts', 'rush_yards', 'rush_td', 'fumbles',
+        // Efficiency metrics
+        'comp_pct', 'yards_per_att', 'net_yards_per_att', 
+        'pass_td_rate', 'int_rate', 'sack_rate', 'yards_per_carry',
+        // Usage metrics
+        'snap_share', 'pass_att_pct',
+        // Status
+        'has_overrides', 'is_fill_player',
+      ];
+    } else if (position === 'RB') {
+      return [
+        // Fantasy points
+        'half_ppr',
+        // Game info
+        'games',
+        // Rushing stats
+        'rush_attempts', 'rush_yards', 'rush_td', 'fumbles',
+        // Receiving stats
+        'targets', 'receptions', 'rec_yards', 'rec_td',
+        // Efficiency metrics
+        'yards_per_carry', 'net_yards_per_carry', 'rush_td_rate',
+        'fumble_rate', 'catch_pct', 'yards_per_target', 'rec_td_rate',
+        // Usage metrics
+        'snap_share', 'target_share', 'rush_share', 'redzone_share', 'car_pct', 'tar_pct',
+        // Status
+        'has_overrides', 'is_fill_player',
+      ];
+    } else if (position === 'WR' || position === 'TE') {
+      return [
+        // Fantasy points
+        'half_ppr',
+        // Game info
+        'games',
+        // Receiving stats
+        'targets', 'receptions', 'rec_yards', 'rec_td',
+        // Rushing stats (for WRs with rushing)
+        'rush_attempts', 'rush_yards', 'rush_td',
+        // Efficiency metrics
+        'catch_pct', 'yards_per_target', 'rec_td_rate',
+        // Usage metrics
+        'snap_share', 'target_share', 'redzone_share', 'tar_pct',
+        // Status
+        'has_overrides', 'is_fill_player',
+      ];
+    } else {
+      // ALL positions - show the most relevant stats across positions
+      return [
+        // Fantasy points
+        'half_ppr',
+        // Game info
+        'games',
+        // Passing stats
+        'pass_attempts', 'completions', 'pass_yards', 'pass_td', 'interceptions',
+        // Rushing stats
+        'rush_attempts', 'rush_yards', 'rush_td',
+        // Receiving stats
+        'targets', 'receptions', 'rec_yards', 'rec_td',
+        // Key efficiency metrics
+        'comp_pct', 'yards_per_att', 'yards_per_carry', 'catch_pct', 'yards_per_target',
+        // Key usage metrics
+        'target_share', 'rush_share',
+        // Status
+        'has_overrides',
+      ];
+    }
+  };
+
+  // Format the value of a stat based on the stat name
+  const formatStatValue = (projection: Projection, statName: string) => {
+    if (!projection || projection[statName as keyof Projection] === undefined) {
+      return '-';
+    }
+    
+    const value = projection[statName as keyof Projection] as number;
+    
+    // Use the predefined formatters from our types if available
+    if (STAT_FORMATS[statName]) {
+      return STAT_FORMATS[statName].formatter(value);
+    }
+    
+    // Fallback formatting
+    if (typeof value === 'number') {
+      return value.toFixed(1);
+    }
+    
+    return String(value);
+  };
+
+  const filteredPlayers = getFilteredAndSortedPlayers();
+  
   return (
-    <div className="space-y-6 p-4">
-      <div className="grid grid-cols-2 gap-4">
-        {/* Scenarios summary */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Projection Scenarios</CardTitle>
-            <CardDescription>
-              {scenarios.length} total scenarios available
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="text-center py-8 text-muted-foreground">Loading scenarios...</div>
-            ) : error ? (
-              <div className="text-center py-8 text-red-500">{error}</div>
-            ) : (
-              <div className="space-y-4">
-                <div className="border rounded-md">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Scenario</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Created</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {scenarios.map(scenario => (
-                        <TableRow key={scenario.scenario_id}>
-                          <TableCell className="font-medium">
-                            {scenario.name}
-                          </TableCell>
-                          <TableCell>
-                            {scenario.is_baseline ? (
-                              <Badge>Baseline</Badge>
-                            ) : (
-                              <Badge variant="outline">Alternative</Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {new Date(scenario.created_at).toLocaleDateString()}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {scenarios.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={3} className="text-center text-muted-foreground">
-                            No scenarios found
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-                
-                {baselineScenario && (
-                  <div className="bg-muted p-3 rounded-md">
-                    <div className="font-medium">Current Baseline:</div>
-                    <div className="text-lg mt-1">{baselineScenario.name}</div>
-                    {baselineScenario.description && (
-                      <div className="text-sm text-muted-foreground mt-1">
-                        {baselineScenario.description}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-          <CardFooter>
-            <Button variant="outline" className="w-full">
-              Manage Scenarios
-            </Button>
-          </CardFooter>
-        </Card>
+    <div className="space-y-6">
+      {/* Top controls */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-2xl font-bold">
+            Player Projections - {season}
+            <span className="text-sm font-normal text-muted-foreground ml-2">
+              {season >= 2025 ? '(Current Season)' : '(Historical Season)'}
+            </span>
+          </h2>
+          <p className="text-muted-foreground">
+            {filteredPlayers.length} fantasy-relevant players found
+            {season >= 2025 
+              ? ' - Filtered by Active Player Roster' 
+              : ' - Showing historical players with stats'}
+          </p>
+        </div>
         
-        {/* Player distribution */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Player Analysis</CardTitle>
-            <CardDescription>
-              Distribution and statistics
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="positions">
-              <TabsList className="mb-4">
-                <TabsTrigger value="positions">Positions</TabsTrigger>
-                <TabsTrigger value="teams">Teams</TabsTrigger>
-                <TabsTrigger value="stats">Fantasy Points</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="positions" className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={positionDistribution}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={90}
-                      paddingAngle={5}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                    >
-                      {positionDistribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => [`${value} players`, 'Count']} />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </TabsContent>
-              
-              <TabsContent value="teams" className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={teamDistribution}
-                    layout="vertical"
-                    margin={{ top: 5, right: 30, left: 30, bottom: 5 }}
-                  >
-                    <XAxis type="number" />
-                    <YAxis type="category" dataKey="name" />
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <Tooltip formatter={(value) => [`${value} players`, 'Count']} />
-                    <Bar dataKey="players" fill="#8884d8" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </TabsContent>
-              
-              <TabsContent value="stats" className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={getPositionFantasyPoints()}
-                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="position" />
-                    <YAxis />
-                    <Tooltip 
-                      formatter={(value) => [
-                        Number(value).toFixed(1),
-                        'Fantasy Points'
-                      ]}
-                    />
-                    <Legend />
-                    <Bar name="Avg Fantasy Points" dataKey="avgPoints" fill="#82ca9d" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+          <Select 
+            value={selectedScenario || ''} 
+            onValueChange={handleScenarioChange}
+          >
+            <SelectTrigger className="w-full sm:w-[200px]">
+              <SelectValue placeholder="Select Scenario" />
+            </SelectTrigger>
+            <SelectContent>
+              {scenarios.map(scenario => (
+                <SelectItem key={scenario.scenario_id} value={scenario.scenario_id}>
+                  {scenario.name} {scenario.is_baseline ? '(Baseline)' : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          <div className="relative w-full sm:w-[250px]">
+            <MagnifyingGlassIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search players..."
+              className="pl-8"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+        </div>
       </div>
       
-      {/* Top projections by position */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {['QB', 'RB', 'WR', 'TE'].map(position => (
-          <Card key={position}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Top {position}s</CardTitle>
-              <CardDescription>
-                Highest projected {position}s
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="px-2">
-              {isLoading ? (
-                <div className="text-center py-4 text-muted-foreground">Loading...</div>
-              ) : error ? (
-                <div className="text-center py-4 text-red-500">Error loading data</div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Player</TableHead>
-                      <TableHead>Team</TableHead>
-                      <TableHead className="text-right">Points</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(topProjections[position] || []).slice(0, 5).map(projection => (
-                      <TableRow key={projection.projection_id}>
-                        <TableCell className="py-1 font-medium">
-                          {getPlayerName(projection.player_id)}
-                        </TableCell>
-                        <TableCell className="py-1">
-                          {getPlayerTeam(projection.player_id)}
-                        </TableCell>
-                        <TableCell className="py-1 text-right">
-                          {projection.half_ppr.toFixed(1)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {(!topProjections[position] || topProjections[position].length === 0) && (
-                      <TableRow>
-                        <TableCell colSpan={3} className="text-center text-muted-foreground py-4">
-                          No projections available
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-            <CardFooter>
-              <Button variant="ghost" size="sm" className="w-full">
-                View All {position}s
-              </Button>
-            </CardFooter>
-          </Card>
-        ))}
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3">
+        <div>
+          <Select value={positionFilter} onValueChange={setPositionFilter}>
+            <SelectTrigger className="w-[120px]">
+              <SelectValue placeholder="Position" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Positions</SelectItem>
+              <SelectItem value="QB">QB</SelectItem>
+              <SelectItem value="RB">RB</SelectItem>
+              <SelectItem value="WR">WR</SelectItem>
+              <SelectItem value="TE">TE</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <div>
+          <Select value={teamFilter} onValueChange={setTeamFilter}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Team" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Teams</SelectItem>
+              {availableTeams.map(team => (
+                <SelectItem key={team} value={team}>{team}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <div className="ml-auto flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => {
+              setSearchTerm('');
+              setPositionFilter('ALL');
+              setTeamFilter('ALL');
+            }}
+          >
+            Reset Filters
+          </Button>
+        </div>
       </div>
       
-      {/* Fantasy point trends */}
+      {/* Main Table */}
       <Card>
-        <CardHeader>
-          <CardTitle>Fantasy Point Distribution</CardTitle>
-          <CardDescription>
-            Fantasy point comparison across top players
-          </CardDescription>
+        <CardHeader className="p-4">
+          <CardTitle>Player Projections</CardTitle>
+          {selectedScenario && scenarios.length > 0 && (
+            <CardDescription>
+              Showing projections for: {scenarios.find(s => s.scenario_id === selectedScenario)?.name || 'Selected Scenario'}
+            </CardDescription>
+          )}
         </CardHeader>
-        <CardContent className="h-80">
+        <CardContent className="p-0">
           {isLoading ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              Loading fantasy point data...
+            <div className="flex items-center justify-center h-96">
+              <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
             </div>
           ) : error ? (
-            <div className="flex items-center justify-center h-full text-red-500">
+            <div className="flex items-center justify-center h-48 text-red-500">
               {error}
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={Object.entries(topProjections).flatMap(([position, projections]) =>
-                  projections.slice(0, 3).map(proj => ({
-                    name: getPlayerName(proj.player_id),
-                    position,
-                    team: getPlayerTeam(proj.player_id),
-                    points: proj.half_ppr
-                  }))
-                )}
-                margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="name" 
-                  tick={{ fontSize: 12 }}
-                  interval={0}
-                  angle={-45}
-                  textAnchor="end"
-                />
-                <YAxis label={{ value: 'Half PPR Points', angle: -90, position: 'insideLeft' }} />
-                <Tooltip
-                  formatter={(value, name, props) => {
-                    if (name === 'points') {
-                      return [`${Number(value).toFixed(1)} pts`, 'Fantasy Points'];
-                    }
-                    return [value, name];
-                  }}
-                  labelFormatter={(label) => label}
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-white p-2 border shadow-sm rounded-md">
-                          <p className="font-medium">{data.name}</p>
-                          <p className="text-xs text-muted-foreground">{data.team} - {data.position}</p>
-                          <p className="text-primary font-medium">{data.points.toFixed(1)} pts</p>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Legend />
-                <Bar 
-                  dataKey="points" 
-                  fill="#8884d8"
-                  name="Fantasy Points"
-                  // Color bars based on position
-                  fill={(data) => {
-                    switch (data.position) {
-                      case 'QB': return '#8884d8';
-                      case 'RB': return '#82ca9d';
-                      case 'WR': return '#ffc658';
-                      case 'TE': return '#ff8042';
-                      default: return '#8884d8';
-                    }
-                  }}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="relative h-[65vh] border-t">
+              <div className="absolute inset-0 overflow-x-auto overflow-y-auto">
+                <div className="min-w-full"> 
+                  <table className="min-w-full divide-y divide-gray-200 table-fixed">
+                    <thead className="bg-background sticky top-0 z-10">
+                      <tr>
+                        <th className="w-12 py-3 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-background z-20 shadow-[1px_0_0_0_#e5e7eb]">
+                          Rank
+                        </th>
+                        <th className="w-[180px] min-w-[180px] py-3 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-12 bg-background z-20 shadow-[1px_0_0_0_#e5e7eb]">
+                          Player
+                        </th>
+                        <th className="w-16 py-3 px-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-[192px] bg-background z-20 shadow-[1px_0_0_0_#e5e7eb]">
+                          Pos
+                        </th>
+                        <th className="w-16 py-3 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-[208px] bg-background z-20 shadow-[1px_0_0_0_#e5e7eb]">
+                          Team
+                        </th>
+                        
+                        {/* Dynamic Stat Columns Based on Position Filter */}
+                        {getColumnsForPosition(positionFilter).map(statName => (
+                          <th 
+                            key={statName}
+                            className="w-24 py-3 px-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer whitespace-nowrap"
+                            onClick={() => handleSortChange(statName)}
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              {STAT_FORMATS[statName]?.label || statName}
+                              {sortField === statName ? (
+                                sortDirection === 'asc' ? 
+                                  <ArrowUpIcon className="h-3 w-3" /> : 
+                                  <ArrowDownIcon className="h-3 w-3" />
+                              ) : (
+                                <ArrowsUpDownIcon className="h-3 w-3 text-muted-foreground opacity-50" />
+                              )}
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-background divide-y divide-gray-200">
+                      {filteredPlayers.length === 0 ? (
+                        <tr>
+                          <td colSpan={getColumnsForPosition(positionFilter).length + 4} className="px-3 py-4 text-center text-sm text-muted-foreground h-32">
+                            {searchTerm || positionFilter !== 'ALL' || teamFilter !== 'ALL' ? 
+                              'No players match the current filters.' : 
+                              'No players found. Try a different scenario.'}
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredPlayers.map((player, index) => {
+                          const projection = projections[player.player_id];
+                          return (
+                            <tr key={player.player_id} className="hover:bg-muted/50">
+                              <td className="px-3 py-2 text-sm sticky left-0 bg-background z-20 shadow-[1px_0_0_0_#e5e7eb] font-mono">
+                                {index + 1}
+                              </td>
+                              <td className="px-3 py-2 text-sm font-medium sticky left-12 bg-background z-20 shadow-[1px_0_0_0_#e5e7eb] whitespace-nowrap">
+                                <button className="text-blue-600 hover:text-blue-800 font-medium text-left w-full text-sm">
+                                  {player.name}
+                                </button>
+                              </td>
+                              <td className="px-3 py-2 text-sm text-center sticky left-[192px] bg-background z-20 shadow-[1px_0_0_0_#e5e7eb]">
+                                {player.position}
+                              </td>
+                              <td className="px-3 py-2 text-sm sticky left-[208px] bg-background z-20 shadow-[1px_0_0_0_#e5e7eb]">
+                                {player.team}
+                              </td>
+                              
+                              {/* Dynamic Stat Values */}
+                              {getColumnsForPosition(positionFilter).map(statName => {
+                                // Get special formatting and colors based on the stat
+                                const statFormat = STAT_FORMATS[statName];
+                                const value = formatStatValue(projection, statName);
+                                const colorClass = statFormat?.color && projection && projection[statName as keyof Projection] !== undefined
+                                  ? statFormat.color(projection[statName as keyof Projection] as number) 
+                                  : '';
+                                
+                                return (
+                                  <td 
+                                    key={statName} 
+                                    className={`px-3 py-2 text-sm font-medium text-right whitespace-nowrap ${colorClass}`}
+                                  >
+                                    {value}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
+      
+      {/* Custom scrollbar styling */}
+      <style jsx global>{`
+        .overflow-x-auto {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(155, 155, 155, 0.5) transparent;
+        }
+        .overflow-x-auto::-webkit-scrollbar {
+          height: 8px;
+          width: 8px;
+        }
+        .overflow-x-auto::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .overflow-x-auto::-webkit-scrollbar-thumb {
+          background-color: rgba(155, 155, 155, 0.5);
+          border-radius: 20px;
+          border: transparent;
+        }
+        
+        table {
+          border-collapse: separate;
+          border-spacing: 0;
+        }
+        
+        .hover\:bg-muted\/50:hover {
+          background-color: rgba(217, 217, 217, 0.1);
+        }
+      `}</style>
     </div>
   );
 };

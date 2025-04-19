@@ -122,16 +122,16 @@ class ScenarioService:
                 logger.error(f"Source scenario {source_scenario_id} not found")
                 return None
 
-            # Create new scenario
+            # Create new scenario with proper reference to the source
             new_scenario = await self.create_scenario(
-                name=new_name, description=new_description, is_baseline=False
+                name=new_name, 
+                description=new_description, 
+                is_baseline=False,
+                base_scenario_id=source_scenario_id  # Set base scenario reference directly
             )
 
             if not new_scenario:
                 return None
-
-            # Set base scenario reference
-            new_scenario.base_scenario_id = source_scenario_id
 
             # Clone all projections
             source_projections = await self.get_scenario_projections(source_scenario_id)
@@ -445,19 +445,57 @@ class ScenarioService:
                 "rec_td": team_stats.rec_td - team_totals["rec_td"],
             }
 
-            # No need to create fill projections if everything balances
-            if all(abs(v) < 0.1 for v in differences.values()):
+            # Check if we need to create fill projections
+            # Use a more nuanced approach - if differences are minimal or negative, we don't need fill players
+            needs_fill_player = False
+            
+            # Check for positive differences that are significant enough to warrant a fill player
+            for stat, value in differences.items():
+                # Consider the stat type when determining significance threshold
+                if stat.endswith('_td'):  # TDs are less frequent, so smaller threshold
+                    threshold = 0.5
+                elif stat.endswith('_attempts') or stat == 'targets' or stat == 'receptions':
+                    threshold = 1.0
+                else:  # For yardage stats
+                    threshold = 5.0
+                
+                # If any positive difference exceeds the threshold, we need a fill player
+                if value > threshold:
+                    needs_fill_player = True
+                    break
+            
+            if not needs_fill_player:
+                logger.info(f"No fill players needed for {team} in {season} - differences within thresholds")
                 return []
+                
+            # Log the differences that triggered fill player creation
+            logger.info(f"Creating fill players for {team} in {season} with differences: {differences}")
 
             # Create fill players by position
             fill_projections = []
 
             # QB fill player (if needed)
-            if (
-                differences["pass_attempts"] > 0
-                or differences["pass_yards"] > 0
-                or differences["pass_td"] > 0
-            ):
+            # Only create a QB fill player if there's a significant difference in passing stats
+            pass_threshold_met = (
+                differences["pass_attempts"] > 5 or
+                differences["pass_yards"] > 50 or
+                differences["pass_td"] > 0.5
+            )
+            
+            if pass_threshold_met:
+                # Estimate completions based on league average completion percentage
+                estimated_completions = differences["pass_attempts"] * 0.65 if differences["pass_attempts"] > 0 else 0
+                
+                # Add a realistic amount of QB rushing (backup QBs often have some mobility)
+                qb_rushing = {
+                    "rush_attempts": min(20, differences["rush_attempts"] * 0.05),  # 5% of remaining rush attempts or 20, whichever is less
+                    "rush_yards": min(100, differences["rush_yards"] * 0.03),  # 3% of remaining rush yards or 100, whichever is less
+                    "rush_td": min(1, differences["rush_td"] * 0.05)  # 5% of remaining rush TDs or 1, whichever is less
+                }
+                
+                # Estimate interceptions based on typical interception rate (around 2% of pass attempts)
+                estimated_ints = differences["pass_attempts"] * 0.02 if differences["pass_attempts"] > 0 else 0
+                
                 qb_fill = await self._create_fill_player(
                     scenario_id=scenario_id,
                     team=team,
@@ -465,57 +503,128 @@ class ScenarioService:
                     season=season,
                     stats={
                         "pass_attempts": max(0, differences["pass_attempts"]),
+                        "completions": max(0, estimated_completions),
                         "pass_yards": max(0, differences["pass_yards"]),
                         "pass_td": max(0, differences["pass_td"]),
-                        "rush_attempts": 0,
-                        "rush_yards": 0,
-                        "rush_td": 0,
+                        "interceptions": max(0, estimated_ints),
+                        "rush_attempts": max(0, qb_rushing["rush_attempts"]),
+                        "rush_yards": max(0, qb_rushing["rush_yards"]), 
+                        "rush_td": max(0, qb_rushing["rush_td"]),
                     },
                 )
                 if qb_fill:
                     fill_projections.append(qb_fill)
 
             # RB fill player (if needed)
-            if (
-                differences["rush_attempts"] > 0
-                or differences["rush_yards"] > 0
-                or differences["rush_td"] > 0
-            ):
+            # Only create RB fill player if there's a significant difference in rushing stats
+            rush_threshold_met = (
+                differences["rush_attempts"] > 10 or
+                differences["rush_yards"] > 40 or
+                differences["rush_td"] > 0.5
+            )
+            
+            # For RBs, also consider receiving contributions since many backup RBs 
+            # have a role in the passing game
+            if rush_threshold_met:
+                # Calculate what's left of the qb rushing stats for the RB
+                remaining_rush_attempts = differences["rush_attempts"]
+                remaining_rush_yards = differences["rush_yards"] 
+                remaining_rush_td = differences["rush_td"]
+                
+                # If we created a QB fill player, subtract their rushing stats
+                if 'qb_fill' in locals() and qb_fill:
+                    remaining_rush_attempts -= getattr(qb_fill, "rush_attempts", 0) or 0
+                    remaining_rush_yards -= getattr(qb_fill, "rush_yards", 0) or 0
+                    remaining_rush_td -= getattr(qb_fill, "rush_td", 0) or 0
+                
+                # Also give RBs some receiving stats (typically ~10-15% of team targets go to RBs)
+                rb_receiving = {
+                    "targets": min(20, differences["targets"] * 0.15),  # 15% of remaining targets or 20, whichever is less
+                    "receptions": 0,  # Will calculate based on catch rate
+                    "rec_yards": 0,  # Will calculate based on yards per reception
+                    "rec_td": min(1, differences["rec_td"] * 0.08)  # 8% of remaining rec TDs or 1, whichever is less
+                }
+                
+                # Estimate receptions based on typical RB catch rate (around 75-80%)
+                rb_receiving["receptions"] = rb_receiving["targets"] * 0.75
+                
+                # Estimate receiving yards based on typical RB yards per reception (around 7-8 yards)
+                rb_receiving["rec_yards"] = rb_receiving["receptions"] * 7.5
+                
                 rb_fill = await self._create_fill_player(
                     scenario_id=scenario_id,
                     team=team,
                     position="RB",
                     season=season,
                     stats={
-                        "rush_attempts": max(0, differences["rush_attempts"]),
-                        "rush_yards": max(0, differences["rush_yards"]),
-                        "rush_td": max(0, differences["rush_td"]),
-                        "targets": 0,
-                        "receptions": 0,
-                        "rec_yards": 0,
-                        "rec_td": 0,
+                        "rush_attempts": max(0, remaining_rush_attempts),
+                        "rush_yards": max(0, remaining_rush_yards),
+                        "rush_td": max(0, remaining_rush_td),
+                        "targets": max(0, rb_receiving["targets"]),
+                        "receptions": max(0, rb_receiving["receptions"]),
+                        "rec_yards": max(0, rb_receiving["rec_yards"]),
+                        "rec_td": max(0, rb_receiving["rec_td"]),
                     },
                 )
                 if rb_fill:
                     fill_projections.append(rb_fill)
 
-            # WR fill player (if needed)
-            if (
-                differences["targets"] > 0
-                or differences["receptions"] > 0
-                or differences["rec_yards"] > 0
-                or differences["rec_td"] > 0
-            ):
+            # Calculate remaining receiving stats after QB and RB fill players
+            remaining_targets = differences["targets"]
+            remaining_receptions = differences["receptions"]
+            remaining_rec_yards = differences["rec_yards"]
+            remaining_rec_td = differences["rec_td"]
+            
+            # Subtract any receiving stats already allocated to other fill players
+            if 'rb_fill' in locals() and rb_fill:
+                remaining_targets -= getattr(rb_fill, "targets", 0) or 0
+                remaining_receptions -= getattr(rb_fill, "receptions", 0) or 0
+                remaining_rec_yards -= getattr(rb_fill, "rec_yards", 0) or 0
+                remaining_rec_td -= getattr(rb_fill, "rec_td", 0) or 0
+            
+            # Determine whether to use WR or TE for the remaining stats
+            # Typically, WR/TE is determined by distribution (WRs ~70-75%, TEs ~25-30%)
+            # First check if we need to create a receiving fill player
+            receiving_threshold_met = (
+                remaining_targets > 10 or
+                remaining_receptions > 5 or
+                remaining_rec_yards > 50 or
+                remaining_rec_td > 0.5
+            )
+            
+            if receiving_threshold_met:
+                # Determine whether to use WR or TE as fill player
+                # Check if we have existing WRs and TEs for this team
+                existing_wrs = self.db.query(Player).filter(
+                    and_(Player.team == team, Player.position == "WR")
+                ).count()
+                
+                existing_tes = self.db.query(Player).filter(
+                    and_(Player.team == team, Player.position == "TE")
+                ).count()
+                
+                # If we have many WRs but few TEs, use a TE fill player
+                # (most teams have 5-6 WRs and 3-4 TEs, so use this as a guide)
+                if existing_wrs > 5 and existing_tes < 3:
+                    position = "TE"
+                else:
+                    # Default to WR as it's more common for teams to have depth WRs
+                    position = "WR"
+                
                 wr_fill = await self._create_fill_player(
                     scenario_id=scenario_id,
                     team=team,
-                    position="WR",
+                    position=position,
                     season=season,
                     stats={
-                        "targets": max(0, differences["targets"]),
-                        "receptions": max(0, differences["receptions"]),
-                        "rec_yards": max(0, differences["rec_yards"]),
-                        "rec_td": max(0, differences["rec_td"]),
+                        "targets": max(0, remaining_targets),
+                        "receptions": max(0, remaining_receptions),
+                        "rec_yards": max(0, remaining_rec_yards),
+                        "rec_td": max(0, remaining_rec_td),
+                        # Add a small amount of rushing for WRs (end-arounds, etc.)
+                        "rush_attempts": position == "WR" and differences["rush_attempts"] > 0 and min(5, differences["rush_attempts"] * 0.03) or 0,
+                        "rush_yards": position == "WR" and differences["rush_yards"] > 0 and min(30, differences["rush_yards"] * 0.02) or 0,
+                        "rush_td": position == "WR" and differences["rush_td"] > 0 and min(0.5, differences["rush_td"] * 0.02) or 0,
                     },
                 )
                 if wr_fill:
@@ -731,7 +840,95 @@ class ScenarioService:
                 for stat, value in stats.items():
                     if hasattr(projection, stat):
                         setattr(projection, stat, value)
-
+                
+                # Calculate efficiency metrics based on position
+                if position == "QB":
+                    pass_attempts = safe_float(safe_dict_get(stats, "pass_attempts", 0.0))
+                    completions = safe_float(safe_dict_get(stats, "completions", 0.0))
+                    pass_yards = safe_float(safe_dict_get(stats, "pass_yards", 0.0))
+                    pass_td = safe_float(safe_dict_get(stats, "pass_td", 0.0))
+                    
+                    # Default completions if not provided (using league average completion percentage)
+                    if completions == 0 and pass_attempts > 0:
+                        completions = pass_attempts * 0.65  # League average completion percentage
+                        projection.completions = completions
+                    
+                    # Calculate efficiency metrics
+                    if pass_attempts > 0:
+                        projection.comp_pct = (completions / pass_attempts) * 100
+                        projection.yards_per_att = pass_yards / pass_attempts
+                        projection.pass_td_rate = pass_td / pass_attempts
+                
+                elif position == "RB":
+                    rush_attempts = safe_float(safe_dict_get(stats, "rush_attempts", 0.0))
+                    rush_yards = safe_float(safe_dict_get(stats, "rush_yards", 0.0))
+                    rush_td = safe_float(safe_dict_get(stats, "rush_td", 0.0))
+                    targets = safe_float(safe_dict_get(stats, "targets", 0.0))
+                    receptions = safe_float(safe_dict_get(stats, "receptions", 0.0))
+                    rec_yards = safe_float(safe_dict_get(stats, "rec_yards", 0.0))
+                    
+                    # Calculate efficiency metrics
+                    if rush_attempts > 0:
+                        projection.yards_per_carry = rush_yards / rush_attempts
+                        projection.rush_td_rate = rush_td / rush_attempts
+                    
+                    if targets > 0:
+                        projection.catch_pct = (receptions / targets) * 100
+                        projection.yards_per_target = rec_yards / targets
+                
+                elif position in ["WR", "TE"]:
+                    targets = safe_float(safe_dict_get(stats, "targets", 0.0))
+                    receptions = safe_float(safe_dict_get(stats, "receptions", 0.0))
+                    rec_yards = safe_float(safe_dict_get(stats, "rec_yards", 0.0))
+                    rec_td = safe_float(safe_dict_get(stats, "rec_td", 0.0))
+                    
+                    # Calculate efficiency metrics
+                    if targets > 0:
+                        projection.catch_pct = (receptions / targets) * 100
+                        projection.yards_per_target = rec_yards / targets
+                        projection.rec_td_rate = rec_td / targets
+                
+                # Set realistic usage shares for fill players
+                team_stats = (
+                    self.db.query(TeamStat)
+                    .filter(and_(TeamStat.team == team, TeamStat.season == season))
+                    .first()
+                )
+                
+                if team_stats:
+                    if position == "QB":
+                        # QB usually has a small portion of the team's rushing
+                        if team_stats.rush_attempts > 0 and rush_attempts > 0:
+                            projection.rush_share = min(0.1, rush_attempts / team_stats.rush_attempts)
+                    
+                    elif position == "RB":
+                        # RB rush share and target share
+                        if team_stats.rush_attempts > 0 and rush_attempts > 0:
+                            projection.rush_share = rush_attempts / team_stats.rush_attempts
+                        
+                        if team_stats.targets > 0 and targets > 0:
+                            projection.target_share = targets / team_stats.targets
+                    
+                    elif position in ["WR", "TE"]:
+                        # WR/TE target share
+                        if team_stats.targets > 0 and targets > 0:
+                            projection.target_share = targets / team_stats.targets
+                
+                # Set a default snap share based on the stats distribution
+                # Fill players generally have a smaller role
+                if position == "QB":
+                    projection.snap_share = 0.2  # Backup QB snap share
+                else:
+                    # For other positions, base snap share on their stat share
+                    # (approximation based on common correlations)
+                    share = 0.0
+                    if position == "RB" and team_stats and team_stats.rush_attempts > 0:
+                        share = rush_attempts / team_stats.rush_attempts
+                    elif position in ["WR", "TE"] and team_stats and team_stats.targets > 0:
+                        share = targets / team_stats.targets
+                    
+                    projection.snap_share = min(0.3, max(0.05, share))  # Between 5-30% snap share
+                
                 # Calculate half_ppr points
                 half_ppr = 0.0
                 if position == "QB":
@@ -740,6 +937,7 @@ class ScenarioService:
                         + safe_float(safe_dict_get(stats, "pass_yards", 0.0)) * 0.04
                         + safe_float(safe_dict_get(stats, "rush_td", 0.0)) * 6.0
                         + safe_float(safe_dict_get(stats, "rush_yards", 0.0)) * 0.1
+                        - safe_float(safe_dict_get(stats, "interceptions", 0.0)) * 2.0  # Add INT penalty
                     )
                 elif position in ["RB", "WR", "TE"]:
                     half_ppr = (
@@ -749,7 +947,7 @@ class ScenarioService:
                         + safe_float(safe_dict_get(stats, "rec_yards", 0.0)) * 0.1
                         + safe_float(safe_dict_get(stats, "receptions", 0.0)) * 0.5
                     )
-
+                
                 projection.half_ppr = half_ppr
 
                 self.db.add(projection)

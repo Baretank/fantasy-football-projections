@@ -14,6 +14,7 @@ from backend.services.rookie_projection_service import RookieProjectionService
 from backend.services.projection_variance_service import ProjectionVarianceService
 from backend.services.team_stat_service import TeamStatService
 from backend.services.scenario_service import ScenarioService
+from backend.services.data_validation import DataValidationService, ValidationResultDict
 from backend.api.schemas import (
     ProjectionResponse,
     ProjectionCreateRequest,
@@ -364,3 +365,122 @@ async def create_draft_based_rookie_projection(
         raise HTTPException(status_code=400, detail="Failed to create rookie projection")
 
     return projection
+    
+    
+@router.get("/validate/mathematical/{player_id}", response_model=Dict[str, Any])
+async def validate_projection_math(
+    player_id: str,
+    season: int = Query(..., ge=2023),
+    scenario_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Validate the mathematical consistency of a player's projection.
+    
+    Args:
+        player_id: The player ID to validate
+        season: The season to validate
+        scenario_id: Optional scenario ID to filter projections
+    """
+    validation_service = DataValidationService(db)
+    issues = await validation_service.validate_mathematical_consistency(
+        player_id=player_id, season=season, scenario_id=scenario_id
+    )
+    
+    return {
+        "player_id": player_id,
+        "season": season,
+        "scenario_id": scenario_id,
+        "valid": len(issues) == 0,
+        "issues": issues
+    }
+    
+    
+@router.get("/validate/batch", response_model=Dict[str, Any])
+async def batch_validate_projections(
+    season: int = Query(..., ge=2023),
+    scenario_id: Optional[str] = None,
+    position: Optional[str] = Query(None, pattern="^(QB|RB|WR|TE)$"),
+    db: Session = Depends(get_db),
+):
+    """
+    Validate the mathematical consistency of multiple projections.
+    
+    Args:
+        season: The season to validate
+        scenario_id: Optional scenario ID to filter projections
+        position: Optional position to filter (QB, RB, WR, TE)
+    """
+    validation_service = DataValidationService(db)
+    results = await validation_service.batch_validate_projections(
+        season=season, scenario_id=scenario_id, position=position
+    )
+    
+    # Calculate summary statistics
+    valid_count = sum(1 for result in results.values() if result.get("valid", False))
+    total_count = len(results)
+    
+    return {
+        "season": season,
+        "scenario_id": scenario_id,
+        "position": position,
+        "summary": {
+            "total": total_count,
+            "valid": valid_count,
+            "invalid": total_count - valid_count,
+            "validity_percentage": (valid_count / total_count * 100) if total_count > 0 else 0
+        },
+        "results": results
+    }
+    
+    
+@router.get("/validate/team/{team}", response_model=ValidationResultDict)
+async def validate_team_stats(
+    team: str,
+    season: int = Query(..., ge=2023),
+    db: Session = Depends(get_db),
+):
+    """
+    Validate the consistency of team statistics.
+    
+    Args:
+        team: The team abbreviation
+        season: The season to validate
+    """
+    validation_service = DataValidationService(db)
+    result = await validation_service.validate_team_stats(team=team, season=season)
+    
+    if not result["valid"] and not result["issues"]:
+        raise HTTPException(status_code=404, detail=f"Team statistics not found for {team}")
+        
+    return result
+    
+    
+@router.get("/validate/all-teams", response_model=Dict[str, Any])
+async def validate_all_teams(
+    season: int = Query(..., ge=2023),
+    db: Session = Depends(get_db),
+):
+    """
+    Validate the consistency of all team statistics.
+    
+    Args:
+        season: The season to validate
+    """
+    validation_service = DataValidationService(db)
+    results = await validation_service.validate_all_teams(season=season)
+    
+    # Calculate summary statistics
+    valid_count = sum(1 for result in results.values() if result.get("valid", False))
+    total_count = len(results)
+    
+    return {
+        "season": season,
+        "summary": {
+            "total": total_count,
+            "valid": valid_count,
+            "invalid": total_count - valid_count,
+            "validity_percentage": (valid_count / total_count * 100) if total_count > 0 else 0
+        },
+        "results": results
+    }

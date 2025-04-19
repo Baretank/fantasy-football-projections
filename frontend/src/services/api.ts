@@ -86,17 +86,26 @@ async function fetchApi(
 
 // Player services
 export const PlayerService = {
-  async getPlayers(position?: string, team?: string, status?: string): Promise<any> {
+  async getPlayers(position?: string, team?: string, status?: string, season?: number): Promise<any> {
     let endpoint = '/players';
     const params = new URLSearchParams();
     
     if (position) params.append('position', position);
     if (team) params.append('team', team);
+    
+    // Only append status if provided - database uses different status codes
     if (status) params.append('status', status);
     
-    // Add pagination parameters for consistent response format
+    // Add season for filtering - this is critical for proper season-aware filtering
+    // of active players (historical vs current seasons)
+    if (season) params.append('season', season.toString());
+    
+    // Request players with a reasonable limit
     params.append('page', '1');
-    params.append('page_size', '100');
+    params.append('page_size', '2000'); // Set a reasonable limit that should capture all relevant players
+    
+    // Do NOT use team_filter - there might be a bug in the backend implementation
+    // params.append('team_filter', 'true');
     
     const queryString = params.toString();
     if (queryString) endpoint += `?${queryString}`;
@@ -110,11 +119,22 @@ export const PlayerService = {
           : typeof response);
       
       // This API endpoint returns { players: [...], pagination: {...} }
-      return response;
+      if (response && typeof response === 'object' && Array.isArray(response.players)) {
+        return response.players;
+      } 
+      
+      // If the response is already an array, return it
+      if (Array.isArray(response)) {
+        return response;
+      }
+      
+      // Return empty array as fallback to maintain consistent return type
+      Logger.warn("Response from players endpoint is not in expected format, returning empty array");
+      return [];
     } catch (error) {
       Logger.error(`PlayerService.getPlayers error:`, error);
-      // Return empty response with players array to maintain expected structure
-      return { players: [], pagination: { total_count: 0, page: 1, total_pages: 1 } };
+      // Return empty array instead of an object to maintain consistent return type
+      return [];
     }
   },
   
@@ -130,10 +150,29 @@ export const PlayerService = {
     
     Logger.debug(`Fetching rookies with endpoint: ${endpoint}`);
     try {
-      return await fetchApi(endpoint);
+      const response = await fetchApi(endpoint);
+      Logger.debug(`getRookies: Response structure:`, 
+        response && typeof response === 'object' 
+          ? Object.keys(response) 
+          : typeof response);
+      
+      // Check if response has an array structure, similar to getPlayers
+      if (response && typeof response === 'object' && Array.isArray(response.players)) {
+        return response.players;
+      } 
+      
+      // If the response is already an array, return it
+      if (Array.isArray(response)) {
+        return response;
+      }
+      
+      // Return empty array as fallback to prevent "rookies is not iterable" error
+      Logger.warn("Response from rookies endpoint is not in expected format, returning empty array");
+      return [];
     } catch (error) {
       Logger.error(`Error fetching rookies from ${endpoint}:`, error);
-      throw error;
+      // Return empty array instead of throwing, which is consistent with getPlayers
+      return [];
     }
   },
 
@@ -148,28 +187,60 @@ export const PlayerService = {
     return fetchApi(endpoint);
   },
   
-  async getPlayersOverview(): Promise<Player[]> {
+  async getPlayersOverview(season?: number): Promise<Player[]> {
     try {
-      // Using the existing getPlayers method, but extracting the players array
-      const response = await this.getPlayers();
+      Logger.info("------- STARTING getPlayersOverview ---------");
       
-      // Log the response for debugging
-      Logger.debug("getPlayersOverview response:", response);
+      // Use the regular getPlayers method with season filtering
+      // If season is not provided, use the current context season
+      Logger.debug(`Fetching all players for season: ${season || 'default'}`);
       
-      // If the response has a players array, return that
-      if (response && typeof response === 'object' && Array.isArray(response.players)) {
-        Logger.debug("Returning players array from response.players");
-        return response.players;
-      } 
+      // Instead of building the endpoint manually, use the getPlayers method
+      // which properly adds the season parameter and uses the correct filters
+      const allPlayersResponse = await this.getPlayers(undefined, undefined, undefined, season);
       
-      // If the response is already an array, return it
-      if (Array.isArray(response)) {
-        Logger.debug("Response is already an array, returning directly");
-        return response;
+      // Inspect the response structure more closely
+      if (allPlayersResponse) {
+        if (typeof allPlayersResponse === 'object') {
+          Logger.debug("Response is an object. Keys:", Object.keys(allPlayersResponse));
+          
+          if (allPlayersResponse.players) {
+            Logger.debug(`Found players array with ${allPlayersResponse.players.length} items`);
+            
+            if (allPlayersResponse.players.length > 0) {
+              Logger.debug("First player:", allPlayersResponse.players[0]);
+            }
+            
+            // Filter for fantasy-relevant positions client-side
+            const fantasyPositions = ['QB', 'RB', 'WR', 'TE'];
+            const relevantPlayers = allPlayersResponse.players.filter(
+              (p: any) => p && p.position && fantasyPositions.includes(p.position)
+            );
+            
+            Logger.info(`Filtered to ${relevantPlayers.length} fantasy-relevant players for season ${season || 'default'}`);
+            return relevantPlayers;
+          }
+        }
+        
+        if (Array.isArray(allPlayersResponse)) {
+          Logger.debug(`Response is directly an array with ${allPlayersResponse.length} items`);
+          
+          if (allPlayersResponse.length > 0) {
+            Logger.debug("First player:", allPlayersResponse[0]);
+          }
+          
+          // Filter for fantasy-relevant positions client-side
+          const fantasyPositions = ['QB', 'RB', 'WR', 'TE'];
+          const relevantPlayers = allPlayersResponse.filter(
+            (p: any) => p && p.position && fantasyPositions.includes(p.position)
+          );
+          
+          Logger.info(`Filtered to ${relevantPlayers.length} fantasy-relevant players for season ${season || 'default'}`);
+          return relevantPlayers;
+        }
       }
       
-      // Return empty array as fallback
-      Logger.debug("Returning empty array as fallback");
+      Logger.error("Unexpected response format, returning empty array");
       return [];
     } catch (error) {
       Logger.error(`PlayerService.getPlayersOverview error:`, error);

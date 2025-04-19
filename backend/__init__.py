@@ -15,7 +15,7 @@ from backend.services.scenario_service import ScenarioService
 from backend.services.draft_service import DraftService
 from backend.services.cache_service import CacheService, get_cache
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 
 __all__ = [
     # Database components

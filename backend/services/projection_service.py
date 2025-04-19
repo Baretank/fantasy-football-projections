@@ -4,8 +4,11 @@ from sqlalchemy import and_
 from datetime import datetime
 import uuid
 import logging
+import pandas as pd
 
 from backend.database.models import Player, BaseStat, Projection, TeamStat, Scenario
+from backend.services.active_player_service import ActivePlayerService
+from backend.services.typing import safe_float
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +45,9 @@ class ProjectionError(Exception):
 
 
 class ProjectionService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, active_player_service=None):
         self.db = db
+        self.active_player_service = active_player_service or ActivePlayerService()
         self.adjustment_ranges = {
             "snap_share": (0.1, 1.0),
             "target_share": (0.0, 0.5),
@@ -54,6 +58,282 @@ class ProjectionService:
             "scoring_rate": (0.5, 1.5),
             "int_rate": (0.5, 1.5),
         }
+        
+    def filter_active_players(self, players: List[Player], season: Optional[int] = None) -> List[Player]:
+        """
+        Filter a list of Player objects to include only active players.
+        
+        Args:
+            players: List of Player objects
+            season: Optional season year for season-specific filtering
+                   (2025 = current season, stricter filtering)
+                   (2024 and earlier = historical seasons, more lenient filtering)
+            
+        Returns:
+            List of active Player objects
+        """
+        if not players:
+            return players
+            
+        try:
+            # Convert players to DataFrame for filtering
+            player_df = pd.DataFrame([
+                {
+                    "display_name": p.name,
+                    "team_abbr": p.team,
+                    "position": p.position,
+                    "player_id": p.player_id,
+                    "status": p.status,
+                    "fantasy_points": getattr(p, "fantasy_points", 0)  # For historical filtering
+                } 
+                for p in players
+            ])
+            
+            # Filter active players with season awareness
+            if not player_df.empty:
+                filtered_df = self.active_player_service.filter_active(
+                    player_df, 
+                    season=season
+                )
+                
+                # Log filtering results
+                filtered_count = len(filtered_df) if not filtered_df.empty else 0
+                original_count = len(player_df)
+                logger.info(
+                    f"Active player filtering (season: {season}): {filtered_count}/{original_count} "
+                    f"players retained ({original_count - filtered_count} filtered out)"
+                )
+                
+                # Return only active players
+                if not filtered_df.empty:
+                    active_ids = set(filtered_df["player_id"].tolist())
+                    return [p for p in players if p.player_id in active_ids]
+                else:
+                    return []
+        except Exception as e:
+            # Log error but continue with unfiltered players
+            logger.error(f"Error filtering active players: {str(e)}")
+            
+        return players
+        
+        # Regression weights for different metrics
+        # These determine how much we weight historical vs current season data
+        self.regression_weights = {
+            # QB metrics
+            "pass_attempts": 0.65,  # 65% current, 35% historical
+            "completions": 0.65,
+            "pass_yards": 0.65,
+            "pass_td": 0.6,  # TDs have higher variance, so more regression
+            "interceptions": 0.5,  # INTs have high variance, so 50/50 split
+            "comp_pct": 0.7,  # Completion % is fairly stable
+            "yards_per_att": 0.65,
+            
+            # RB metrics
+            "rush_attempts": 0.7,
+            "rush_yards": 0.65,
+            "rush_td": 0.6,
+            "yards_per_carry": 0.6,  # YPC has variance year to year
+            
+            # Receiving metrics (RB/WR/TE)
+            "targets": 0.7,
+            "receptions": 0.7,
+            "rec_yards": 0.65,
+            "rec_td": 0.55,  # Receiving TDs have high variance
+            "catch_pct": 0.7,
+            "yards_per_target": 0.65,
+            
+            # Usage metrics (defaults)
+            "snap_share": 0.75,
+            "target_share": 0.7,
+            "rush_share": 0.7,
+        }
+        
+    def _safe_calculate_share_factor(self, new_share: float, current_share: Any) -> float:
+        """Safely calculate a relative share factor between new and current share values.
+        
+        Args:
+            new_share: The new share value to set
+            current_share: The current share value (may be None or non-numeric)
+            
+        Returns:
+            float: The multiplication factor to apply to stats
+        """
+        try:
+            # Convert current_share to float, defaulting to 0.0 if None or invalid
+            current_float = 0.0
+            if current_share is not None:
+                try:
+                    current_float = float(current_share)
+                except (ValueError, TypeError):
+                    current_float = 0.0
+            
+            # Calculate relative factor (safely handle division by zero)
+            if current_float > 0.0:
+                return new_share / current_float
+            else:
+                return new_share
+        except Exception as e:
+            logger.error(f"Error calculating share factor: {str(e)}")
+            # Return a safe default if anything goes wrong
+            return new_share
+            
+    async def apply_statistical_regression(
+        self, player_id: str, season: int, scenario_id: Optional[str] = None
+    ) -> Optional[Projection]:
+        """
+        Apply statistical regression to smooth projections using historical data.
+        
+        This method implements a weighted average between a player's current projection
+        and their historical averages, creating more stable and reliable projections.
+        
+        Args:
+            player_id: The player ID to apply regression to
+            season: Current season
+            scenario_id: Optional scenario ID to filter projections
+            
+        Returns:
+            Updated projection with regression applied, or None if failed
+        """
+        try:
+            # Get the player
+            player = self.db.get(Player, player_id)
+            if not player:
+                logger.error(f"Player {player_id} not found")
+                return None
+                
+            # Get the player's current projection
+            query = self.db.query(Projection).filter(
+                and_(
+                    Projection.player_id == player_id,
+                    Projection.season == season
+                )
+            )
+            
+            if scenario_id:
+                query = query.filter(Projection.scenario_id == scenario_id)
+            else:
+                # If no scenario, get the base projection
+                query = query.filter(Projection.scenario_id.is_(None))
+                
+            current_projection = query.first()
+            if not current_projection:
+                logger.error(f"No projection found for player {player_id} in season {season}")
+                return None
+                
+            # Get historical stats (from previous season)
+            previous_season = season - 1
+            historical_stats = (
+                self.db.query(BaseStat)
+                .filter(
+                    and_(
+                        BaseStat.player_id == player_id,
+                        BaseStat.season == previous_season,
+                        BaseStat.week.is_(None)  # Season totals
+                    )
+                )
+                .all()
+            )
+            
+            # If no historical stats, no regression can be applied
+            if not historical_stats:
+                logger.info(f"No historical stats found for player {player_id}, skipping regression")
+                return current_projection
+                
+            # Convert historical stats to a more usable format
+            hist_stats_dict = {}
+            for stat in historical_stats:
+                if stat.stat_type and stat.value is not None:
+                    hist_stats_dict[stat.stat_type] = float(stat.value)
+            
+            # Create a map from BaseStat stat_type to Projection field names
+            # This is needed because the field names might not match exactly
+            stat_mapping = {
+                "pass_attempts": "pass_attempts",
+                "completions": "completions",
+                "pass_yards": "pass_yards",
+                "pass_td": "pass_td",
+                "interceptions": "interceptions",
+                "rush_attempts": "rush_attempts",
+                "rush_yards": "rush_yards", 
+                "rush_td": "rush_td",
+                "targets": "targets",
+                "receptions": "receptions",
+                "rec_yards": "rec_yards",
+                "rec_td": "rec_td",
+                # Efficiency metrics can be recalculated later
+            }
+            
+            # Apply regression to each stat
+            for hist_stat, proj_field in stat_mapping.items():
+                # Only process if we have historical data for this stat
+                if hist_stat in hist_stats_dict:
+                    hist_value = hist_stats_dict[hist_stat]
+                    curr_value = getattr(current_projection, proj_field)
+                    
+                    # Skip if current value is None
+                    if curr_value is None:
+                        continue
+                        
+                    # Get the regression weight for this stat
+                    weight = self.regression_weights.get(proj_field, 0.65)  # Default to 0.65 if not specified
+                    
+                    # Apply weighted average: weight * current + (1 - weight) * historical
+                    regressed_value = (weight * float(curr_value)) + ((1 - weight) * hist_value)
+                    
+                    # Update the projection with the regressed value
+                    setattr(current_projection, proj_field, regressed_value)
+            
+            # Recalculate efficiency metrics based on the regressed stats
+            # For QB
+            if player.position == "QB" and current_projection.pass_attempts > 0:
+                if current_projection.completions is not None:
+                    current_projection.comp_pct = (
+                        current_projection.completions / current_projection.pass_attempts * 100
+                    )
+                    
+                if current_projection.pass_yards is not None:
+                    current_projection.yards_per_att = (
+                        current_projection.pass_yards / current_projection.pass_attempts
+                    )
+                    
+                if current_projection.pass_td is not None:
+                    current_projection.pass_td_rate = (
+                        current_projection.pass_td / current_projection.pass_attempts
+                    )
+            
+            # For rushing stats (QB/RB)
+            if current_projection.rush_attempts is not None and current_projection.rush_attempts > 0:
+                if current_projection.rush_yards is not None:
+                    current_projection.yards_per_carry = (
+                        current_projection.rush_yards / current_projection.rush_attempts
+                    )
+            
+            # For receiving stats (RB/WR/TE)
+            if current_projection.targets is not None and current_projection.targets > 0:
+                if current_projection.receptions is not None:
+                    current_projection.catch_pct = (
+                        current_projection.receptions / current_projection.targets * 100
+                    )
+                    
+                if current_projection.rec_yards is not None:
+                    current_projection.yards_per_target = (
+                        current_projection.rec_yards / current_projection.targets
+                    )
+            
+            # Recalculate fantasy points
+            current_projection.half_ppr = current_projection.calculate_fantasy_points()
+            
+            # Set updated timestamp
+            current_projection.updated_at = datetime.utcnow()
+            
+            # Save changes
+            self.db.commit()
+            return current_projection
+            
+        except Exception as e:
+            logger.error(f"Error applying statistical regression: {str(e)}")
+            self.db.rollback()
+            return None
 
     async def get_projection(self, projection_id: str) -> Optional[Projection]:
         """Retrieve a specific projection."""
@@ -312,43 +592,68 @@ class ProjectionService:
 
                 if "target_share" in adjustments:
                     factor = adjustments["target_share"]
+                    # Get the current target_share
+                    current_target_share = projection_values.get("target_share", 0.0)
                     
+                    # Use our safe helper function to calculate the relative multiplier
+                    relative_factor = self._safe_calculate_share_factor(factor, current_target_share)
+                    
+                    # Store the target_share value (as a percentage between 0-0.5)
+                    projection_values["target_share"] = min(0.5, max(0.0, factor))
+                    
+                    # Apply the relative factor to all receiving stats
                     targets = projection_values.get("targets")
                     if targets is not None:
-                        projection_values["targets"] = float(targets) * factor
+                        projection_values["targets"] = float(targets) * relative_factor
                     
                     receptions = projection_values.get("receptions")
                     if receptions is not None:
-                        projection_values["receptions"] = float(receptions) * factor * 0.95
+                        projection_values["receptions"] = float(receptions) * relative_factor * 0.95
                     
                     rec_yards = projection_values.get("rec_yards")
                     if rec_yards is not None:
-                        projection_values["rec_yards"] = float(rec_yards) * factor
+                        projection_values["rec_yards"] = float(rec_yards) * relative_factor
                     
                     rec_td = projection_values.get("rec_td")
                     if rec_td is not None:
-                        projection_values["rec_td"] = float(rec_td) * factor
+                        projection_values["rec_td"] = float(rec_td) * relative_factor
                     
                     updated_targets = projection_values.get("targets")
                     updated_receptions = projection_values.get("receptions")
                     updated_rec_yards = projection_values.get("rec_yards")
                     updated_rec_td = projection_values.get("rec_td")
                     
-                    if updated_targets is not None and float(updated_targets) > 0:
-                        if updated_receptions is not None:
-                            projection_values["catch_pct"] = (
-                                float(updated_receptions) / float(updated_targets) * 100
-                            )
-                        
-                        if updated_rec_yards is not None:
-                            projection_values["yards_per_target"] = (
-                                float(updated_rec_yards) / float(updated_targets)
-                            )
-                        
-                        if updated_rec_td is not None:
-                            projection_values["rec_td_rate"] = (
-                                float(updated_rec_td) / float(updated_targets)
-                            )
+                    # Safely handle target-based calculations
+                    if updated_targets is not None:
+                        try:
+                            targets_float = float(updated_targets)
+                            if targets_float > 0:
+                                # Calculate catch_pct if receptions are available
+                                if updated_receptions is not None:
+                                    try:
+                                        receptions_float = float(updated_receptions)
+                                        projection_values["catch_pct"] = (receptions_float / targets_float) * 100
+                                    except (ValueError, TypeError):
+                                        pass
+                                
+                                # Calculate yards_per_target if rec_yards are available
+                                if updated_rec_yards is not None:
+                                    try:
+                                        rec_yards_float = float(updated_rec_yards)
+                                        projection_values["yards_per_target"] = rec_yards_float / targets_float
+                                    except (ValueError, TypeError):
+                                        pass
+                                
+                                # Calculate rec_td_rate if rec_td are available
+                                if updated_rec_td is not None:
+                                    try:
+                                        rec_td_float = float(updated_rec_td)
+                                        projection_values["rec_td_rate"] = rec_td_float / targets_float
+                                    except (ValueError, TypeError):
+                                        pass
+                        except (ValueError, TypeError):
+                            # Skip calculations if targets can't be converted to float
+                            pass
 
                 # Apply td_rate adjustment for RBs
                 if "td_rate" in adjustments:
@@ -374,45 +679,68 @@ class ProjectionService:
                 # WR/TE adjustments
                 if "target_share" in adjustments:
                     factor = adjustments["target_share"]
-                    # Store the target_share value directly
-                    projection_values["target_share"] = factor
+                    # Get the current target_share
+                    current_target_share = projection_values.get("target_share", 0.0)
                     
+                    # Use our safe helper function to calculate the relative multiplier
+                    relative_factor = self._safe_calculate_share_factor(factor, current_target_share)
+                    
+                    # Store the target_share value (as a percentage between 0-0.5)
+                    projection_values["target_share"] = min(0.5, max(0.0, factor))
+                    
+                    # Apply the relative factor to all receiving stats
                     targets = projection_values.get("targets")
                     if targets is not None:
-                        projection_values["targets"] = float(targets) * factor
+                        projection_values["targets"] = float(targets) * relative_factor
                     
                     receptions = projection_values.get("receptions")
                     if receptions is not None:
-                        projection_values["receptions"] = float(receptions) * factor * 0.95
+                        projection_values["receptions"] = float(receptions) * relative_factor * 0.95
                     
                     rec_yards = projection_values.get("rec_yards")
                     if rec_yards is not None:
-                        projection_values["rec_yards"] = float(rec_yards) * factor
+                        projection_values["rec_yards"] = float(rec_yards) * relative_factor
                     
                     rec_td = projection_values.get("rec_td")
                     if rec_td is not None:
-                        projection_values["rec_td"] = float(rec_td) * factor
+                        projection_values["rec_td"] = float(rec_td) * relative_factor
                     
                     updated_targets = projection_values.get("targets")
                     updated_receptions = projection_values.get("receptions")
                     updated_rec_yards = projection_values.get("rec_yards")
                     updated_rec_td = projection_values.get("rec_td")
                     
-                    if updated_targets is not None and float(updated_targets) > 0:
-                        if updated_receptions is not None:
-                            projection_values["catch_pct"] = (
-                                float(updated_receptions) / float(updated_targets) * 100
-                            )
-                        
-                        if updated_rec_yards is not None:
-                            projection_values["yards_per_target"] = (
-                                float(updated_rec_yards) / float(updated_targets)
-                            )
-                        
-                        if updated_rec_td is not None:
-                            projection_values["rec_td_rate"] = (
-                                float(updated_rec_td) / float(updated_targets)
-                            )
+                    # Safely handle target-based calculations
+                    if updated_targets is not None:
+                        try:
+                            targets_float = float(updated_targets)
+                            if targets_float > 0:
+                                # Calculate catch_pct if receptions are available
+                                if updated_receptions is not None:
+                                    try:
+                                        receptions_float = float(updated_receptions)
+                                        projection_values["catch_pct"] = (receptions_float / targets_float) * 100
+                                    except (ValueError, TypeError):
+                                        pass
+                                
+                                # Calculate yards_per_target if rec_yards are available
+                                if updated_rec_yards is not None:
+                                    try:
+                                        rec_yards_float = float(updated_rec_yards)
+                                        projection_values["yards_per_target"] = rec_yards_float / targets_float
+                                    except (ValueError, TypeError):
+                                        pass
+                                
+                                # Calculate rec_td_rate if rec_td are available
+                                if updated_rec_td is not None:
+                                    try:
+                                        rec_td_float = float(updated_rec_td)
+                                        projection_values["rec_td_rate"] = rec_td_float / targets_float
+                                    except (ValueError, TypeError):
+                                        pass
+                        except (ValueError, TypeError):
+                            # Skip calculations if targets can't be converted to float
+                            pass
 
                 if "td_rate" in adjustments:
                     factor = adjustments["td_rate"]
@@ -589,6 +917,228 @@ class ProjectionService:
         except Exception as e:
             logger.error(f"Error getting projection trends: {str(e)}")
             return []
+            
+    async def fix_efficiency_metrics(
+        self, player_id: Optional[str] = None, team: Optional[str] = None, 
+        position: Optional[str] = None, season: Optional[int] = None, 
+        scenario_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Recalculate and fix efficiency metrics for projections.
+        
+        This method ensures that derived metrics like yards_per_att, comp_pct, etc.
+        are consistent with the base statistics in the projections.
+        
+        Args:
+            player_id: Optional specific player ID
+            team: Optional team filter
+            position: Optional position filter
+            season: Optional season filter
+            scenario_id: Optional scenario ID filter
+            
+        Returns:
+            Dictionary with results summary
+        """
+        try:
+            # Build query for projections
+            query = self.db.query(Projection)
+            
+            if player_id:
+                query = query.filter(Projection.player_id == player_id)
+            elif team or position:
+                # Join with Player table for team/position filtering
+                query = query.join(Player)
+                
+                if team:
+                    query = query.filter(Player.team == team)
+                    
+                if position:
+                    query = query.filter(Player.position == position)
+            
+            if season:
+                query = query.filter(Projection.season == season)
+                
+            if scenario_id:
+                query = query.filter(Projection.scenario_id == scenario_id)
+                
+            projections = query.all()
+            
+            if not projections:
+                return {"success": False, "message": "No projections found matching criteria", "count": 0}
+            
+            # Track results
+            updated_count = 0
+            error_messages = []
+            
+            # Process each projection
+            for projection in projections:
+                try:
+                    # Get the player position to know which metrics to calculate
+                    player = self.db.get(Player, projection.player_id)
+                    if not player:
+                        error_messages.append(f"Player not found for projection {projection.projection_id}")
+                        continue
+                    
+                    # Calculate QB metrics
+                    if player.position == "QB":
+                        # Calculate completion percentage
+                        if (projection.pass_attempts is not None and 
+                            projection.pass_attempts > 0 and 
+                            projection.completions is not None):
+                            projection.comp_pct = (projection.completions / projection.pass_attempts) * 100
+                            
+                        # Calculate yards per attempt
+                        if (projection.pass_attempts is not None and 
+                            projection.pass_attempts > 0 and 
+                            projection.pass_yards is not None):
+                            projection.yards_per_att = projection.pass_yards / projection.pass_attempts
+                            
+                        # Calculate TD rate
+                        if (projection.pass_attempts is not None and 
+                            projection.pass_attempts > 0 and 
+                            projection.pass_td is not None):
+                            projection.pass_td_rate = projection.pass_td / projection.pass_attempts
+                            
+                        # Calculate INT rate
+                        if (projection.pass_attempts is not None and 
+                            projection.pass_attempts > 0 and 
+                            projection.interceptions is not None):
+                            projection.int_rate = projection.interceptions / projection.pass_attempts
+                    
+                    # Calculate rushing metrics for all positions
+                    if (projection.rush_attempts is not None and 
+                        projection.rush_attempts > 0 and 
+                        projection.rush_yards is not None):
+                        projection.yards_per_carry = projection.rush_yards / projection.rush_attempts
+                        
+                        if projection.rush_td is not None:
+                            projection.rush_td_rate = projection.rush_td / projection.rush_attempts
+                    
+                    # Calculate receiving metrics for relevant positions
+                    if player.position in ["RB", "WR", "TE"]:
+                        if (projection.targets is not None and 
+                            projection.targets > 0):
+                            
+                            # Calculate catch percentage
+                            if projection.receptions is not None:
+                                projection.catch_pct = (projection.receptions / projection.targets) * 100
+                                
+                            # Calculate yards per target
+                            if projection.rec_yards is not None:
+                                projection.yards_per_target = projection.rec_yards / projection.targets
+                                
+                            # Calculate receiving TD rate
+                            if projection.rec_td is not None:
+                                projection.rec_td_rate = projection.rec_td / projection.targets
+                    
+                    # Set usage metrics if they are not set
+                    # These are specifically for team context and require team stats
+                    # We'll just set reasonable defaults here based on position if they're None
+                    if projection.snap_share is None:
+                        if player.position == "QB":
+                            projection.snap_share = 1.0  # Starting QBs typically play all snaps
+                        elif player.position == "RB":
+                            projection.snap_share = 0.5  # RBs often rotate
+                        elif player.position == "WR" or player.position == "TE":
+                            projection.snap_share = 0.7  # Typical for starting receivers
+                    
+                    # Recalculate fantasy points
+                    projection.half_ppr = projection.calculate_fantasy_points()
+                    
+                    # Set updated timestamp
+                    projection.updated_at = datetime.utcnow()
+                    
+                    updated_count += 1
+                    
+                except Exception as e:
+                    error_messages.append(f"Error updating metrics for projection {projection.projection_id}: {str(e)}")
+            
+            # Commit all changes
+            self.db.commit()
+            
+            return {
+                "success": True,
+                "message": f"Updated efficiency metrics for {updated_count} of {len(projections)} projections",
+                "count": updated_count,
+                "errors": error_messages if error_messages else None
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fixing efficiency metrics: {str(e)}")
+            self.db.rollback()
+            return {"success": False, "message": f"Error fixing efficiency metrics: {str(e)}", "count": 0}
+    
+    async def batch_apply_regression(
+        self, team: Optional[str] = None, position: Optional[str] = None, 
+        season: int = 2024, scenario_id: Optional[str] = None,
+        active_only: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Apply statistical regression to a batch of players, filtered by team and/or position.
+        
+        Args:
+            team: Optional team filter
+            position: Optional position filter
+            season: Season to apply regression to
+            scenario_id: Optional scenario ID
+            
+        Returns:
+            Dictionary with results summary
+        """
+        try:
+            # Build query for players
+            query = self.db.query(Player)
+            
+            if team:
+                query = query.filter(Player.team == team)
+                
+            if position:
+                query = query.filter(Player.position == position)
+                
+            players = query.all()
+            
+            # Filter for active players if requested
+            if active_only:
+                # Track original count for logging
+                original_count = len(players)
+                players = self.filter_active_players(players, season=season)
+                logger.info(f"Active player filtering: {len(players)}/{original_count} players retained")
+            
+            if not players:
+                return {"success": False, "message": "No players found matching criteria", "count": 0}
+                
+            # Track results
+            success_count = 0
+            error_messages = []
+            
+            # Process each player
+            for player in players:
+                try:
+                    # Apply regression
+                    result = await self.apply_statistical_regression(
+                        player_id=player.player_id,
+                        season=season,
+                        scenario_id=scenario_id
+                    )
+                    
+                    if result:
+                        success_count += 1
+                    else:
+                        error_messages.append(f"Failed to apply regression for {player.name}")
+                        
+                except Exception as e:
+                    error_messages.append(f"Error applying regression for {player.name}: {str(e)}")
+            
+            return {
+                "success": True,
+                "message": f"Applied regression to {success_count} of {len(players)} players",
+                "count": success_count,
+                "errors": error_messages if error_messages else None
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in batch regression: {str(e)}")
+            return {"success": False, "message": f"Error in batch regression: {str(e)}", "count": 0}
 
     async def _calculate_base_projection(
         self, player: Player, team_stats: TeamStat, base_stats: List[BaseStat], season: int
@@ -734,25 +1284,64 @@ class ProjectionService:
         """Adjust RB-specific statistics."""
         if "rush_share" in adjustments:
             factor = adjustments["rush_share"]
-            projection.rush_attempts = projection.rush_attempts * factor
-            projection.rush_yards = projection.rush_yards * factor
-            projection.rush_td = projection.rush_td * factor
-            if projection.rush_attempts > 0:
-                projection.yards_per_carry = projection.rush_yards / projection.rush_attempts
-                projection.rush_td_rate = projection.rush_td / projection.rush_attempts
+            current_rush_share = getattr(projection, "rush_share", 0.0) or 0.0
+            
+            # Calculate the relative multiplier based on the current and new rush share
+            relative_factor = factor / current_rush_share if current_rush_share > 0 else factor
+            
+            # Store the rush_share value (as a percentage between 0-0.5)
+            projection.rush_share = min(0.5, max(0.0, factor))
+            
+            # Apply adjustments based on the relative factor
+            if projection.rush_attempts is not None:
+                projection.rush_attempts = projection.rush_attempts * relative_factor
+                
+            if projection.rush_yards is not None:
+                projection.rush_yards = projection.rush_yards * relative_factor
+                
+            if projection.rush_td is not None:
+                projection.rush_td = projection.rush_td * relative_factor
+                
+            if projection.rush_attempts is not None and projection.rush_attempts > 0:
+                if projection.rush_yards is not None:
+                    projection.yards_per_carry = projection.rush_yards / projection.rush_attempts
+                    
+                if projection.rush_td is not None:
+                    projection.rush_td_rate = projection.rush_td / projection.rush_attempts
 
         if "target_share" in adjustments:
             factor = adjustments["target_share"]
-            projection.targets = projection.targets * factor
-            projection.receptions = projection.receptions * (
-                factor * 0.95
-            )  # Slight reduction in catch rate
-            projection.rec_yards = projection.rec_yards * factor
-            projection.rec_td = projection.rec_td * factor
-            if projection.targets > 0:
-                projection.catch_pct = projection.receptions / projection.targets * 100
-                projection.yards_per_target = projection.rec_yards / projection.targets
-                projection.rec_td_rate = projection.rec_td / projection.targets
+            current_target_share = getattr(projection, "target_share", 0.0)
+            
+            # Use our safe helper function to calculate the relative multiplier
+            relative_factor = self._safe_calculate_share_factor(factor, current_target_share)
+            
+            # Store the target_share value (as a percentage between 0-0.5)
+            projection.target_share = min(0.5, max(0.0, factor))
+            
+            # Apply adjustments based on the relative factor
+            if projection.targets is not None:
+                projection.targets = projection.targets * relative_factor
+                
+            if projection.receptions is not None:
+                # Slight reduction in catch rate
+                projection.receptions = projection.receptions * (relative_factor * 0.95)
+                
+            if projection.rec_yards is not None:
+                projection.rec_yards = projection.rec_yards * relative_factor
+                
+            if projection.rec_td is not None:
+                projection.rec_td = projection.rec_td * relative_factor
+                
+            if projection.targets is not None and projection.targets > 0:
+                if projection.receptions is not None:
+                    projection.catch_pct = projection.receptions / projection.targets * 100
+                    
+                if projection.rec_yards is not None:
+                    projection.yards_per_target = projection.rec_yards / projection.targets
+                    
+                if projection.rec_td is not None:
+                    projection.rec_td_rate = projection.rec_td / projection.targets
 
     async def _adjust_receiver_stats(
         self, projection: Projection, team_stats: TeamStat, adjustments: AdjustmentDict
@@ -760,18 +1349,41 @@ class ProjectionService:
         """Adjust WR/TE-specific statistics."""
         if "target_share" in adjustments:
             factor = adjustments["target_share"]
-            projection.targets = projection.targets * factor
-            projection.receptions = projection.receptions * (factor * 0.95)
-            projection.rec_yards = projection.rec_yards * factor
-            projection.rec_td = projection.rec_td * factor
-            if projection.targets > 0:
-                projection.catch_pct = projection.receptions / projection.targets * 100
-                projection.yards_per_target = projection.rec_yards / projection.targets
-                projection.rec_td_rate = projection.rec_td / projection.targets
+            current_target_share = getattr(projection, "target_share", 0.0)
+            
+            # Use our safe helper function to calculate the relative multiplier
+            relative_factor = self._safe_calculate_share_factor(factor, current_target_share)
+            
+            # Store the target_share value (as a percentage between 0-0.5)
+            projection.target_share = min(0.5, max(0.0, factor))
+            
+            # Apply adjustments based on the relative factor
+            if projection.targets is not None:
+                projection.targets = projection.targets * relative_factor
+                
+            if projection.receptions is not None:
+                projection.receptions = projection.receptions * (relative_factor * 0.95)
+                
+            if projection.rec_yards is not None:    
+                projection.rec_yards = projection.rec_yards * relative_factor
+                
+            if projection.rec_td is not None:
+                projection.rec_td = projection.rec_td * relative_factor
+                
+            if projection.targets is not None and projection.targets > 0:
+                if projection.receptions is not None:
+                    projection.catch_pct = projection.receptions / projection.targets * 100
+                    
+                if projection.rec_yards is not None:
+                    projection.yards_per_target = projection.rec_yards / projection.targets
+                    
+                if projection.rec_td is not None:
+                    projection.rec_td_rate = projection.rec_td / projection.targets
 
         if "snap_share" in adjustments:
             factor = adjustments["snap_share"]
-            projection.snap_share = min(1.0, (projection.snap_share or 0.0) * factor)
+            current_snap_share = getattr(projection, "snap_share", 0.0) or 0.0
+            projection.snap_share = min(1.0, current_snap_share * factor)
 
     async def _apply_team_adjustment(
         self, projection: Projection, team_stats: TeamStat, adjustments: AdjustmentDict
