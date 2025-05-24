@@ -128,5 +128,64 @@
 - Added comprehensive debugging to identify where and why players were being filtered out
 - Discovered database status codes: 'ACT' (active), 'RET' (retired), etc. that didn't match our 'Active' filter
 
-## Current Issues
+## 8. Percentage and Share Calculations - Fixed
+
+**Issue:**
+- Percentage calculations (comp_pct, catch_pct) were being multiplied by 100 twice:
+  - Once in the backend calculation: `(completions / attempts) * 100`
+  - Once in the frontend display: `(value * 100).toFixed(1) + '%'`
+- This resulted in completion percentages showing as 6500% instead of 65%
+- Target share and rush share calculations were missing entirely from projection creation
+- Share values were not being calculated when projections were created
+- Frontend was incorrectly formatting already-converted percentages
+
+**Root Cause:**
+- Backend was correctly calculating percentages as 0-100 values
+- Frontend formatters were treating them as 0-1 decimals and multiplying by 100 again
+- Share calculations (rush_share, target_share) were not implemented in the position-specific stat setters
+- No method existed to recalculate shares after team stats became available
+
+**Solution:**
+1. **Backend Fixes (projection_service.py):**
+   - Ensured percentage calculations store values as 0-100 (already correct)
+   - Added share calculations to all position-specific methods (`_set_qb_stats`, `_set_rb_stats`, `_set_receiver_stats`)
+   - Implemented `recalculate_shares` method to update share metrics based on team totals
+   - Added proper bounds checking to ensure shares stay between 0 and 1
+
+2. **Frontend Fixes (types/index.ts):**
+   - Updated `comp_pct` formatter to not multiply by 100: `value.toFixed(1) + '%'`
+   - Updated `catch_pct` formatter to not multiply by 100: `value.toFixed(1) + '%'`
+   - Adjusted color coding thresholds to work with percentage values (65 instead of 0.65)
+   - Share formatters (target_share, rush_share) continue to multiply by 100 as they're stored as decimals
+
+3. **Database Fix Script:**
+   - Created comprehensive script to fix existing data: `backend/scripts/fix_percentage_and_shares.py`
+   - Fixes any remaining percentage calculations over 100%
+   - Calculates missing share values for all existing projections
+   - Validates all fixes and provides detailed reporting
+
+**Changes:**
+- Modified `/backend/services/projection_service.py`:
+  - Fixed percentage calculation consistency in `_set_qb_stats`, `_set_rb_stats`, `_set_receiver_stats`
+  - Added share calculations (rush_share, target_share) to all position-specific methods
+  - Added new `recalculate_shares` method for post-creation share updates
+  - Ensured shares are properly bounded between 0 and 1
+
+- Modified `/frontend/src/types/index.ts`:
+  - Updated `comp_pct` formatter to handle already-converted percentages
+  - Updated `catch_pct` formatter to handle already-converted percentages
+  - Adjusted color thresholds from decimal (0.65) to percentage (65) values
+
+- Created `/backend/scripts/fix_percentage_and_shares.py`:
+  - Comprehensive script to fix existing database records
+  - Validates percentage calculations and recalculates shares
+  - Successfully processed 157 projections with 0 errors
+  - Added 157 rush_share values and 138 target_share values
+
+**Validation Results:**
+- ✅ All percentage values now within valid ranges (0-100)
+- ✅ All share values properly bounded (0-1) 
+- ✅ 157 projections updated with correct rush_share calculations
+- ✅ 138 projections updated with correct target_share calculations
+- ✅ Frontend display now shows correct percentage values (65% instead of 6500%)
 

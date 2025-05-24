@@ -331,8 +331,8 @@ export const STAT_FORMATS: Record<string, StatDisplayFormat> = {
   // Efficiency metrics - Passing
   comp_pct: { 
     label: 'Comp %', 
-    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%',
-    color: (value) => value !== null && value !== undefined ? (value > 0.65 ? 'text-green-500' : value < 0.58 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) + '%' : '0.0%',
+    color: (value) => value !== null && value !== undefined ? (value > 65 ? 'text-green-500' : value < 58 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
   },
   yards_per_att: { 
     label: 'YPA', 
@@ -385,8 +385,8 @@ export const STAT_FORMATS: Record<string, StatDisplayFormat> = {
   // Efficiency metrics - Receiving
   catch_pct: { 
     label: 'Catch %', 
-    formatter: (value) => value !== null && value !== undefined ? (value * 100).toFixed(1) + '%' : '0.0%',
-    color: (value) => value !== null && value !== undefined ? (value > 0.7 ? 'text-green-500' : value < 0.6 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
+    formatter: (value) => value !== null && value !== undefined ? value.toFixed(1) + '%' : '0.0%',
+    color: (value) => value !== null && value !== undefined ? (value > 70 ? 'text-green-500' : value < 60 ? 'text-red-500' : 'text-amber-500') : 'text-amber-500'
   },
   yards_per_target: { 
     label: 'YPT', 

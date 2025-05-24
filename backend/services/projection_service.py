@@ -1139,6 +1139,76 @@ class ProjectionService:
         except Exception as e:
             logger.error(f"Error in batch regression: {str(e)}")
             return {"success": False, "message": f"Error in batch regression: {str(e)}", "count": 0}
+    
+    async def recalculate_shares(self, projection_id: str) -> Optional[Projection]:
+        """Recalculate share metrics for a projection based on team totals."""
+        try:
+            projection = self.db.query(Projection).get(projection_id)
+            if not projection:
+                return None
+                
+            player = projection.player
+            if not player:
+                return None
+                
+            # Get team stats
+            team_stats = (
+                self.db.query(TeamStat)
+                .filter(and_(TeamStat.team == player.team, TeamStat.season == projection.season))
+                .first()
+            )
+            
+            if not team_stats:
+                logger.warning(f"No team stats found for {player.team} in {projection.season}")
+                return projection
+                
+            # Calculate shares based on position
+            if player.position == "QB":
+                # QB typically has minimal rush share
+                if team_stats.rush_attempts and team_stats.rush_attempts > 0 and projection.rush_attempts:
+                    projection.rush_share = projection.rush_attempts / team_stats.rush_attempts
+                else:
+                    projection.rush_share = 0.0
+                    
+            elif player.position == "RB":
+                # RB rush share
+                if team_stats.rush_attempts and team_stats.rush_attempts > 0 and projection.rush_attempts:
+                    projection.rush_share = projection.rush_attempts / team_stats.rush_attempts
+                else:
+                    projection.rush_share = 0.0
+                    
+                # RB target share
+                if team_stats.targets and team_stats.targets > 0 and projection.targets:
+                    projection.target_share = projection.targets / team_stats.targets
+                else:
+                    projection.target_share = 0.0
+                    
+            elif player.position in ["WR", "TE"]:
+                # WR/TE target share
+                if team_stats.targets and team_stats.targets > 0 and projection.targets:
+                    projection.target_share = projection.targets / team_stats.targets
+                else:
+                    projection.target_share = 0.0
+                    
+                # WR rush share (usually minimal)
+                if player.position == "WR" and team_stats.rush_attempts and team_stats.rush_attempts > 0 and projection.rush_attempts:
+                    projection.rush_share = projection.rush_attempts / team_stats.rush_attempts
+                else:
+                    projection.rush_share = 0.0
+            
+            # Ensure shares are between 0 and 1
+            if projection.rush_share is not None:
+                projection.rush_share = max(0.0, min(1.0, projection.rush_share))
+            if projection.target_share is not None:
+                projection.target_share = max(0.0, min(1.0, projection.target_share))
+                
+            self.db.commit()
+            return projection
+            
+        except Exception as e:
+            logger.error(f"Error recalculating shares: {str(e)}")
+            self.db.rollback()
+            return None
 
     async def _calculate_base_projection(
         self, player: Player, team_stats: TeamStat, base_stats: List[BaseStat], season: int
@@ -1487,7 +1557,7 @@ class ProjectionService:
                 projection.yards_per_att = projection.pass_yards / projection.pass_attempts
             
             if projection.completions is not None:
-                projection.comp_pct = projection.completions / projection.pass_attempts * 100
+                projection.comp_pct = (projection.completions / projection.pass_attempts) * 100
             
             if projection.pass_td is not None:
                 projection.pass_td_rate = projection.pass_td / projection.pass_attempts
@@ -1497,6 +1567,14 @@ class ProjectionService:
             projection.rush_yards is not None):
             
             projection.yards_per_carry = projection.rush_yards / projection.rush_attempts
+            
+        # Calculate share metrics
+        if team_stats:
+            # Rush share for QBs (usually small but should be calculated)
+            if team_stats.rush_attempts and team_stats.rush_attempts > 0 and projection.rush_attempts:
+                projection.rush_share = projection.rush_attempts / team_stats.rush_attempts
+            else:
+                projection.rush_share = 0.0
 
     def _set_rb_stats(self, projection: Projection, stats_dict: StatsDict, team_stats: TeamStat) -> None:
         """Set RB-specific projection stats."""
@@ -1522,13 +1600,27 @@ class ProjectionService:
             projection.targets > 0):
             
             if projection.receptions is not None:
-                projection.catch_pct = projection.receptions / projection.targets * 100
+                projection.catch_pct = (projection.receptions / projection.targets) * 100
             
             if projection.rec_yards is not None:
                 projection.yards_per_target = projection.rec_yards / projection.targets
             
             if projection.rec_td is not None:
                 projection.rec_td_rate = projection.rec_td / projection.targets
+                
+        # Calculate share metrics
+        if team_stats:
+            # Rush share calculation
+            if team_stats.rush_attempts and team_stats.rush_attempts > 0 and projection.rush_attempts:
+                projection.rush_share = projection.rush_attempts / team_stats.rush_attempts
+            else:
+                projection.rush_share = 0.0
+                
+            # Target share calculation
+            if team_stats.targets and team_stats.targets > 0 and projection.targets:
+                projection.target_share = projection.targets / team_stats.targets
+            else:
+                projection.target_share = 0.0
 
     def _set_receiver_stats(
         self, projection: Projection, stats_dict: StatsDict, team_stats: TeamStat
@@ -1547,7 +1639,7 @@ class ProjectionService:
             projection.targets > 0):
             
             if projection.receptions is not None:
-                projection.catch_pct = projection.receptions / projection.targets * 100
+                projection.catch_pct = (projection.receptions / projection.targets) * 100
             
             if projection.rec_yards is not None:
                 projection.yards_per_target = projection.rec_yards / projection.targets
@@ -1560,3 +1652,17 @@ class ProjectionService:
             projection.rush_yards is not None):
             
             projection.yards_per_carry = projection.rush_yards / projection.rush_attempts
+            
+        # Calculate share metrics
+        if team_stats:
+            # Target share calculation
+            if team_stats.targets and team_stats.targets > 0 and projection.targets:
+                projection.target_share = projection.targets / team_stats.targets
+            else:
+                projection.target_share = 0.0
+                
+            # Rush share for WRs (usually small but should be calculated)
+            if team_stats.rush_attempts and team_stats.rush_attempts > 0 and projection.rush_attempts:
+                projection.rush_share = projection.rush_attempts / team_stats.rush_attempts
+            else:
+                projection.rush_share = 0.0
